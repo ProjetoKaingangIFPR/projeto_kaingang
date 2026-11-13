@@ -33,3 +33,5 @@ npm run lint
 npm test
 npm run build
 ```
+
+FRONTEND_ORIGIN aceita uma ou mais origens exatas separadas por v?rgula, sem barra final. Exemplo: `FRONTEND_ORIGIN=https://projeto-kaingang.pages.dev,https://seusite.com`. Espa?os entre as origens s?o permitidos.

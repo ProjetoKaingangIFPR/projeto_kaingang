@@ -11,7 +11,7 @@ const cookie = 'kaingang_admin';
 app.use('/api/*', async (c,next) => {
  c.header('Cache-Control','no-store');
  c.header('X-Content-Type-Options','nosniff');
- if (!['GET','HEAD'].includes(c.req.method) && (c.req.header('Origin') && ![new URL(c.req.url).origin,c.env.FRONTEND_ORIGIN].includes(c.req.header('Origin')))) return c.json({error:'Origem não permitida.'},403);
+ if (!['GET','HEAD'].includes(c.req.method) && (c.req.header('Origin') && ![new URL(c.req.url).origin,...(c.env.FRONTEND_ORIGIN || '').split(',').map(origin => origin.trim()).filter(Boolean)].includes(c.req.header('Origin')))) return c.json({error:'Origem não permitida.'},403);
  const token = getCookie(c,cookie);
  const session = token ? await c.env.DB.prepare(`SELECT s.user_id FROM admin_sessions s JOIN admin_users u ON u.id = s.user_id
    WHERE s.token_hash = ? AND s.session_version = u.session_version AND s.expires_at > ?`).bind(await hashToken(token),Date.now()).first<{user_id: number}>() : null;
