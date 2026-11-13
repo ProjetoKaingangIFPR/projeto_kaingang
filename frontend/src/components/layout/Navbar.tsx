@@ -152,6 +152,13 @@ export const Navbar: React.FC<NavbarProps> = ({
 
             {/* Menu Links Body (Simples com Animação Fluida no Hover) */}
             <div className="flex-1 max-w-sm w-full mx-auto px-6 py-8 flex flex-col justify-center">
+              <p className="mb-6 px-4 text-sm sm:text-base font-semibold leading-relaxed text-white/90">
+          ESCOLA KAINGANG SEGSÕ THÁN SÁ
+          <br />
+          TERRA INDÍGENA SALTO DAS LONTRAS
+          <br />
+          PALMAS – PARANÁ
+        </p>
               <nav
                 className="flex flex-col gap-2.5"
                 aria-label="Links do Menu Mobile"

@@ -71,7 +71,7 @@ export const HeroSection: React.FC = () => {
         garantindo que Hero + Navbar formem exatamente 100svh no primeiro impacto visual.
       */}
       <div className="relative w-full flex-1 min-h-0 overflow-hidden bg-neutral-950">
-        <h1 className="absolute top-3 right-3 left-[7.75rem] z-30 text-right text-[clamp(0.625rem,2.6vw,0.875rem)] leading-relaxed font-semibold tracking-tight text-white drop-shadow-[0_2px_4px_rgba(0,0,0,0.9)] pointer-events-none break-words sm:top-5 sm:right-6 sm:left-44 sm:text-base md:left-60 md:right-8 md:text-lg lg:left-72 lg:right-12">
+        <h1 className="hidden xl:block absolute top-3 right-3 left-[7.75rem] z-30 text-right text-[clamp(0.625rem,2.6vw,0.875rem)] leading-relaxed font-semibold tracking-tight text-white drop-shadow-[0_2px_4px_rgba(0,0,0,0.9)] pointer-events-none break-words sm:top-5 sm:right-6 sm:left-44 sm:text-base md:left-60 md:right-8 md:text-lg lg:left-72 lg:right-12">
           ESCOLA KAINGANG SEGSÕ THÁN SÁ
           <br />
           TERRA INDÍGENA SALTO DAS LONTRAS
