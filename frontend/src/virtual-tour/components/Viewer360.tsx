@@ -172,6 +172,7 @@ export const Viewer360: React.FC<Viewer360Props> = ({
   const mouseDownPosRef = useRef<{ x: number; y: number }>({ x: 0, y: 0 });
 
   // Component UI States
+  const [isPanoramaLoading, setIsPanoramaLoading] = useState(true);
   const [activeArtwork, setActiveArtwork] = useState<ArtworkHotspot | null>(null);
   const [hoveredLabel, setHoveredLabel] = useState<string | null>(null);
   const [hoveredPos, setHoveredPos] = useState<{ x: number; y: number } | null>(null);
@@ -319,6 +320,7 @@ export const Viewer360: React.FC<Viewer360Props> = ({
           fadeSphereRef.current.visible = false;
           fadeMat.opacity = 0;
           transitionStateRef.current.active = false;
+          setIsPanoramaLoading(false);
         }
       }
 
@@ -387,15 +389,20 @@ export const Viewer360: React.FC<Viewer360Props> = ({
   useEffect(() => {
     if (!mainSphereRef.current || !fadeSphereRef.current) return;
 
+    let cancelled = false;
+    setIsPanoramaLoading(true);
+    transitionStateRef.current.active = false;
     const url = resolvePanoramaSource(currentPoint.panoramaUrl || currentPoint.id);
     const isFirstLoad = !(mainSphereRef.current.material as THREE.MeshBasicMaterial).map;
 
     loadTextureAsync(url).then((nextTex) => {
+      if (cancelled || !mainSphereRef.current || !fadeSphereRef.current) return;
       if (isFirstLoad) {
         // Initial first load: set directly on main sphere
         const mat = mainSphereRef.current!.material as THREE.MeshBasicMaterial;
         mat.map = nextTex;
         mat.needsUpdate = true;
+        setIsPanoramaLoading(false);
       } else {
         // Subsequent navigation: start smooth cross-fade transition
         const fadeSphere = fadeSphereRef.current!;
@@ -418,6 +425,7 @@ export const Viewer360: React.FC<Viewer360Props> = ({
     if (currentPoint.initialYaw !== undefined) {
       targetYawRef.current = currentPoint.initialYaw;
     }
+    return () => { cancelled = true; };
   }, [currentPoint, loadTextureAsync]);
 
   // 3. Rebuild 3D Interactive Floor Arrows & Artwork Pins
@@ -699,6 +707,14 @@ export const Viewer360: React.FC<Viewer360Props> = ({
       />
 
       {/* 3D Tooltip Hover */}
+      {isPanoramaLoading && (
+        <div className="absolute inset-0 z-30 flex items-center justify-center bg-black/20 pointer-events-none">
+          <div role="status" aria-live="polite" className="flex items-center gap-3 rounded-2xl border border-white/15 bg-neutral-900/90 px-5 py-3 text-sm text-white shadow-xl backdrop-blur-md">
+            <span aria-hidden="true" className="h-5 w-5 shrink-0 animate-spin motion-reduce:animate-none rounded-full border-2 border-white/25 border-t-white" />
+            <span>Carregando {currentPoint.name?.trim() || 'posição'}…</span>
+          </div>
+        </div>
+      )}
       {hoveredLabel && hoveredPos && (
         <div
           className="fixed pointer-events-none z-40 bg-neutral-900/95 text-white text-xs font-semibold px-3 py-1.5 rounded-xl shadow-2xl backdrop-blur border border-white/10 -translate-x-1/2 -translate-y-12 animate-in fade-in duration-100 flex items-center gap-1.5"
