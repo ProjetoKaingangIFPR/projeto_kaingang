@@ -1,4 +1,4 @@
-import React, { useRef, useEffect, useState, useCallback } from 'react';
+import React, { useRef, useLayoutEffect, useState, useCallback } from 'react';
 import { TourData, Point360 } from '../types';
 import { 
   renderArchitecturalFloorPlan, 
@@ -51,7 +51,7 @@ export const InteractiveFloorPlan: React.FC<InteractiveFloorPlanProps> = ({
   const { floorPlan, points } = tourData;
 
   // Reset zoom & pan when expanded state changes
-  useEffect(() => {
+  useLayoutEffect(() => {
     setZoom(1);
     setPanOffset({ x: 0, y: 0 });
   }, [isExpanded]);
@@ -66,6 +66,9 @@ export const InteractiveFloorPlan: React.FC<InteractiveFloorPlanProps> = ({
     // Support sharp HiDPI screens
     const dpr = window.devicePixelRatio || 1;
     const rect = canvas.getBoundingClientRect();
+    if (!rect.width || !rect.height) return;
+    // Um viewport de referência mantém pontos, traços e radar proporcionais.
+    const viewportScale = Math.min(rect.width / 240, rect.height / 160);
 
     if (canvas.width !== Math.round(rect.width * dpr) || canvas.height !== Math.round(rect.height * dpr)) {
       canvas.width = Math.round(rect.width * dpr);
@@ -73,12 +76,12 @@ export const InteractiveFloorPlan: React.FC<InteractiveFloorPlanProps> = ({
     }
 
     ctx.save();
-    ctx.scale(dpr, dpr);
+    ctx.scale(dpr * viewportScale, dpr * viewportScale);
 
     renderArchitecturalFloorPlan({
       ctx,
-      canvasWidth: rect.width,
-      canvasHeight: rect.height,
+      canvasWidth: rect.width / viewportScale,
+      canvasHeight: rect.height / viewportScale,
       tourData,
       currentPointId,
       cameraHeadingRad,
@@ -92,9 +95,9 @@ export const InteractiveFloorPlan: React.FC<InteractiveFloorPlanProps> = ({
       showConnections: true,
       showCompass: false,
       showScale: false,
-      interactivePadding: isExpanded ? 24 : 14,
+      interactivePadding: 14,
       zoom,
-      panOffset,
+      panOffset: { x: panOffset.x / viewportScale, y: panOffset.y / viewportScale },
       autoFit: true
     });
 
@@ -111,15 +114,25 @@ export const InteractiveFloorPlan: React.FC<InteractiveFloorPlanProps> = ({
     panOffset
   ]);
 
-  useEffect(() => {
+  const drawRef = useRef(draw);
+  useLayoutEffect(() => {
+    drawRef.current = draw;
     draw();
   }, [draw]);
 
-  useEffect(() => {
-    const handleResize = () => draw();
+  useLayoutEffect(() => {
+    const canvas = canvasRef.current;
+    if (!canvas) return;
+    // Também acompanha cada etapa da animação de tamanho do contêiner.
+    const handleResize = () => drawRef.current();
+    const observer = new ResizeObserver(handleResize);
+    observer.observe(canvas);
     window.addEventListener('resize', handleResize);
-    return () => window.removeEventListener('resize', handleResize);
-  }, [draw]);
+    return () => {
+      observer.disconnect();
+      window.removeEventListener('resize', handleResize);
+    };
+  }, []);
 
   // Detect Point click / hover accurately with minimum distance calculation
   const getPointAtMouse = useCallback((clientX: number, clientY: number) => {
@@ -130,7 +143,8 @@ export const InteractiveFloorPlan: React.FC<InteractiveFloorPlanProps> = ({
     const mx = clientX - rect.left;
     const my = clientY - rect.top;
 
-    const padding = isExpanded ? 24 : 14;
+    const viewportScale = Math.min(rect.width / 240, rect.height / 160);
+    const padding = 14 * viewportScale;
     const bounds = getFloorPlanBounds(floorPlan, points);
 
     const availableW = Math.max(10, rect.width - padding * 2);
@@ -144,7 +158,7 @@ export const InteractiveFloorPlan: React.FC<InteractiveFloorPlanProps> = ({
     let closestPt: Point360 | null = null;
     let minDist = Infinity;
     // Dynamic hit radius based on zoom level to ensure precision
-    const maxHitRadius = Math.max(14, Math.min(22, 18 * Math.sqrt(zoom)));
+    const maxHitRadius = Math.max(14, Math.min(22, 18 * Math.sqrt(zoom))) * viewportScale;
 
     for (const pt of points) {
       const px = originX + pt.x * baseScale;
@@ -175,7 +189,7 @@ export const InteractiveFloorPlan: React.FC<InteractiveFloorPlanProps> = ({
       if (Math.abs(newZoom - prevZoom) < 0.001) return prevZoom;
 
       const bounds = getFloorPlanBounds(floorPlan, points);
-      const padding = isExpanded ? 24 : 14;
+      const padding = 14 * Math.min(rect.width / 240, rect.height / 160);
       const availableW = Math.max(10, rect.width - padding * 2);
       const availableH = Math.max(10, rect.height - padding * 2);
       const fitScale = Math.min(availableW / bounds.width, availableH / bounds.height);
@@ -265,7 +279,7 @@ export const InteractiveFloorPlan: React.FC<InteractiveFloorPlanProps> = ({
     <div
       id="interactive-floorplan-container"
       ref={containerRef}
-      className={`relative rounded-2xl overflow-hidden transition-all duration-300 shadow-2xl border pointer-events-auto flex flex-col ${
+      className={`relative rounded-2xl overflow-hidden transition-[width,height] duration-300 shadow-2xl border pointer-events-auto flex flex-col ${
         isDark
           ? 'bg-neutral-950 border-neutral-800 text-white'
           : 'bg-white border-neutral-200 text-neutral-900'
@@ -302,7 +316,7 @@ export const InteractiveFloorPlan: React.FC<InteractiveFloorPlanProps> = ({
       </div>
 
       {/* Canvas Area */}
-      <div className="relative flex-1 w-full h-full overflow-hidden">
+      <div className="relative flex-1 min-h-0 w-full h-full overflow-hidden">
         <canvas
           id="floorplan-canvas"
           ref={canvasRef}
