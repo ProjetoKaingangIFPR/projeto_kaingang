@@ -7,10 +7,11 @@ import { Viewer360 } from "./virtual-tour/components/Viewer360";
 import { InteractiveFloorPlan } from "./virtual-tour/components/InteractiveFloorPlan";
 import { FloorPlanEditor } from "./virtual-tour/components/FloorPlanEditor";
 import { api, ApiError } from "./admin/api";
+import ChangePasswordModal from './admin/ChangePasswordModal';
 
 
 
-export default function VirtualVisitsPage({ administrative = false, onSessionEnd }: { administrative?: boolean; onSessionEnd?: () => void }) {
+export default function VirtualVisitsPage({ administrative = false, onSessionEnd }: { administrative?: boolean; onSessionEnd?: (message?: string) => void }) {
   const [tourData, setTourData] = useState<TourData>(DEFAULT_TOUR);
   const [mode, setMode] = useState<EditorMode>(administrative ? "editor" : "view");
   const [loading, setLoading] = useState(true);
@@ -20,6 +21,7 @@ export default function VirtualVisitsPage({ administrative = false, onSessionEnd
   const [message, setMessage] = useState('');
   const [saveError, setSaveError] = useState(false);
   const [expired, setExpired] = useState(false);
+  const [changingPassword, setChangingPassword] = useState(false);
   const [currentPointId, setCurrentPointId] = useState(
     tourData.startingPointId || tourData.points[0]?.id || "p1",
   );
@@ -136,9 +138,16 @@ export default function VirtualVisitsPage({ administrative = false, onSessionEnd
           <Compass className="h-4 w-4" />
           {administrative ? 'Painel administrativo · Editor de planta' : 'Memórias da Escola Indígena'}
         </div>
-        {administrative ? <button onClick={logout} className="px-3 py-2 text-sm text-white/80 hover:text-white">Sair</button> : <div className="w-24 sm:w-40" />}
+        {administrative ? <div className="flex gap-2"><button disabled={saving} onClick={() => {
+          if (dirty && !window.confirm('Trocar a senha encerrará seu acesso. Salve a planta antes para não perder as alterações. Deseja continuar?')) return;
+          setChangingPassword(true);
+        }} className="px-3 py-2 text-sm text-white/80 hover:text-white disabled:opacity-50">Alterar senha</button><button onClick={logout} className="px-3 py-2 text-sm text-white/80 hover:text-white">Sair</button></div> : <div className="w-24 sm:w-40" />}
       </div>
 
+      {administrative && changingPassword && <ChangePasswordModal onClose={() => setChangingPassword(false)} onChanged={() => {
+        setDirty(false);
+        onSessionEnd?.('Senha alterada. Entre novamente com a nova senha.');
+      }} />}
       {administrative && <div className="flex flex-wrap items-center justify-between gap-3 border-b border-white/10 bg-[#1c2720] px-4 py-3 text-white">
         <div><h1 className="font-semibold text-sm">Editor de planta</h1><p role="status" className={`text-xs mt-1 ${saveError ? 'text-red-300' : 'text-white/65'}`}>{message || (dirty ? 'Alterações ainda não publicadas.' : 'Gerencie ambientes, paredes e pontos 360°.')}</p></div>
         <div className="flex flex-wrap gap-2">

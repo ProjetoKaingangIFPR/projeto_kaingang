@@ -1,44 +1,66 @@
 import { Hono } from 'hono';
 import { getCookie, setCookie } from 'hono/cookie';
-import { timingSafeEqual } from 'hono/utils/buffer';
 import { bodyLimit } from 'hono/body-limit';
 import type { Env } from './env';
 import { tourSchema } from './tour-schema';
 import { loadTour, saveTour } from './tour-store';
-const app = new Hono<{Bindings: Env; Variables: {authenticated: boolean}}>();
-const hash = async (s: string) => Array.from(new Uint8Array(await crypto.subtle.digest('SHA-256', new TextEncoder().encode(s))), b => b.toString(16).padStart(2,'0')).join('');
+import { authenticate, bootstrapConfigured, changePasswordSchema, getAdmin, hashToken, loginSchema, reserveAttempt } from './auth';
+import { hashPassword, verifyPassword } from './password';
+const app = new Hono<{Bindings: Env; Variables: {authenticated: boolean; userId: number | undefined}}>();
 const cookie = 'kaingang_admin';
 app.use('/api/*', async (c,next) => {
  c.header('Cache-Control','no-store');
  c.header('X-Content-Type-Options','nosniff');
  if (!['GET','HEAD'].includes(c.req.method) && (c.req.header('Origin') && ![new URL(c.req.url).origin,c.env.FRONTEND_ORIGIN].includes(c.req.header('Origin')))) return c.json({error:'Origem não permitida.'},403);
  const token = getCookie(c,cookie);
- const version = await hash(`${c.env.ADMIN_USERNAME}\0${c.env.ADMIN_PASSWORD}`);
- const session = token && c.env.ADMIN_PASSWORD && await c.env.DB.prepare('SELECT token_hash FROM admin_sessions WHERE token_hash = ? AND credential_version = ? AND expires_at > ?').bind(await hash(token),version,Date.now()).first();
+ const session = token ? await c.env.DB.prepare(`SELECT s.user_id FROM admin_sessions s JOIN admin_users u ON u.id = s.user_id
+   WHERE s.token_hash = ? AND s.session_version = u.session_version AND s.expires_at > ?`).bind(await hashToken(token),Date.now()).first<{user_id: number}>() : null;
  c.set('authenticated',Boolean(session));
+ c.set('userId',session?.user_id);
  await next();
 });
-app.get('/api/admin/session', c => c.json({authenticated:c.get('authenticated'),configured:Boolean(c.env.ADMIN_USERNAME && c.env.ADMIN_PASSWORD)}));
+app.get('/api/admin/session', async c => c.json({authenticated:c.get('authenticated'),configured:Boolean(await getAdmin(c.env.DB)) || bootstrapConfigured(c.env)}));
 app.post('/api/admin/login',bodyLimit({maxSize:4096}),async c => {
- if (!c.env.ADMIN_USERNAME || !c.env.ADMIN_PASSWORD) return c.json({error:'Configure as credenciais administrativas.'},503);
- const now=Date.now(); const client=await hash(c.req.header('CF-Connecting-IP') || 'local');
- const attempt=await c.env.DB.prepare('SELECT count FROM login_attempts WHERE client_hash = ? AND expires_at > ?').bind(client,now).first<{count:number}>();
- if (attempt && attempt.count>=10) return c.json({error:'Muitas tentativas. Aguarde 15 minutos.'},429);
- const body=await c.req.json();
- const userOK=await timingSafeEqual(String(body.username || ''),c.env.ADMIN_USERNAME);
- const passOK=await timingSafeEqual(String(body.password || ''),c.env.ADMIN_PASSWORD);
- if (!userOK || !passOK) {
- await c.env.DB.prepare('INSERT INTO login_attempts VALUES (?,1,?) ON CONFLICT(client_hash) DO UPDATE SET count = CASE WHEN expires_at <= ? THEN 1 ELSE count + 1 END, expires_at = CASE WHEN expires_at <= ? THEN excluded.expires_at ELSE expires_at END').bind(client,now+900000,now,now).run();
- return c.json({error:'Usuário ou senha inválidos.'},401);
- }
+ if (!await getAdmin(c.env.DB) && !bootstrapConfigured(c.env)) return c.json({error:'Configure as credenciais iniciais com uma senha de pelo menos 12 caracteres.'},503);
+ const now=Date.now(); const client=await hashToken(c.req.header('CF-Connecting-IP') || 'local');
+ if (!await reserveAttempt(c.env.DB,client,now)) return c.json({error:'Muitas tentativas. Aguarde 15 minutos.'},429);
+ const parsed=loginSchema.safeParse(await c.req.json().catch(()=>null));
+ if (!parsed.success) return c.json({error:'Informe usuário e senha válidos.'},400);
+ const user=await authenticate(c.env,parsed.data.username,parsed.data.password);
+ if (!user) return c.json({error:'Usuário ou senha inválidos.'},401);
  const token=crypto.randomUUID()+crypto.randomUUID();
- await c.env.DB.batch([c.env.DB.prepare('DELETE FROM admin_sessions WHERE expires_at <= ?').bind(now),c.env.DB.prepare('DELETE FROM login_attempts WHERE client_hash = ? OR expires_at <= ?').bind(client,now),c.env.DB.prepare('INSERT INTO admin_sessions VALUES (?,?,?)').bind(await hash(token),await hash(`${c.env.ADMIN_USERNAME}\0${c.env.ADMIN_PASSWORD}`),now+28800000)]);
+ const results=await c.env.DB.batch([c.env.DB.prepare('DELETE FROM admin_sessions WHERE expires_at <= ?').bind(now),
+   c.env.DB.prepare('DELETE FROM login_attempts WHERE expires_at <= ?').bind(now),
+   c.env.DB.prepare(`INSERT INTO admin_sessions (token_hash, user_id, session_version, expires_at)
+     SELECT ?, id, session_version, ? FROM admin_users WHERE id = ? AND session_version = ?`)
+     .bind(await hashToken(token),now+28800000,user.id,user.session_version)]);
+ if (!results[2].meta.changes) return c.json({error:'A senha foi alterada. Entre novamente.'},401);
  setCookie(c,cookie,token,{httpOnly:true,sameSite:'Strict',secure:new URL(c.req.url).protocol==='https:',path:'/',maxAge:28800});
  return c.json({authenticated:true});
 });
-app.post('/api/admin/logout',async c=>{const token=getCookie(c,cookie);if(token)await c.env.DB.prepare('DELETE FROM admin_sessions WHERE token_hash = ?').bind(await hash(token)).run();setCookie(c,cookie,'',{path:'/',maxAge:0,httpOnly:true,sameSite:'Strict',secure:new URL(c.req.url).protocol==='https:'});return c.json({authenticated:false});});
+app.post('/api/admin/logout',async c=>{const token=getCookie(c,cookie);if(token)await c.env.DB.prepare('DELETE FROM admin_sessions WHERE token_hash = ?').bind(await hashToken(token)).run();setCookie(c,cookie,'',{path:'/',maxAge:0,httpOnly:true,sameSite:'Strict',secure:new URL(c.req.url).protocol==='https:'});return c.json({authenticated:false});});
 app.get('/api/tour',async c=>c.json({tour:await loadTour(c.env.DB)}));
 app.use('/api/admin/*',async(c,next)=>{if(!c.get('authenticated'))return c.json({error:'Entre novamente para continuar.'},401);await next();});
+app.post('/api/admin/password',bodyLimit({maxSize:8192}),async c=>{
+ const now=Date.now();
+ const client=await hashToken(`password:${c.req.header('CF-Connecting-IP') || 'local'}`);
+ if (!await reserveAttempt(c.env.DB,client,now)) return c.json({error:'Muitas tentativas. Aguarde 15 minutos.'},429);
+ const parsed=changePasswordSchema.safeParse(await c.req.json().catch(()=>null));
+ if (!parsed.success) return c.json({error:'Informe a senha atual e uma nova senha de 12 a 1024 caracteres.'},400);
+ const user=await getAdmin(c.env.DB);
+ if (!user || user.id!==c.get('userId') || !await verifyPassword(user.password_hash,parsed.data.currentPassword)) return c.json({error:'Senha atual inválida.'},401);
+ if (parsed.data.currentPassword===parsed.data.newPassword) return c.json({error:'Escolha uma senha diferente da atual.'},400);
+ const passwordHash=await hashPassword(parsed.data.newPassword);
+ const results=await c.env.DB.batch([
+   c.env.DB.prepare('UPDATE admin_users SET password_hash = ?, session_version = ?, updated_at = ? WHERE id = ? AND session_version = ?')
+     .bind(passwordHash,crypto.randomUUID(),now,user.id,user.session_version),
+   // Remove somente sessões desatualizadas, sem apagar um login com a nova senha.
+   c.env.DB.prepare('DELETE FROM admin_sessions WHERE user_id = ? AND session_version != (SELECT session_version FROM admin_users WHERE id = ?)').bind(user.id,user.id),
+ ]);
+ if (!results[0].meta.changes) return c.json({error:'A senha já foi alterada. Entre novamente.'},409);
+ setCookie(c,cookie,'',{path:'/',maxAge:0,httpOnly:true,sameSite:'Strict',secure:new URL(c.req.url).protocol==='https:'});
+ return c.json({changed:true,authenticated:false});
+});
 app.put('/api/admin/tour',bodyLimit({maxSize:1000000}),async c=>{const parsed=tourSchema.safeParse(await c.req.json());if(!parsed.success)return c.json({error:parsed.error.issues[0]?.message || 'Planta inválida.'},400);await saveTour(c.env.DB,parsed.data);return c.json({saved:true});});
 app.post('/api/admin/media',bodyLimit({maxSize:20*1024*1024}),async c=>{
  const type=c.req.header('Content-Type')?.split(';')[0];

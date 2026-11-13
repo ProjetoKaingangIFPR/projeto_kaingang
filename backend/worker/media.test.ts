@@ -13,7 +13,7 @@ test('upload autenticado grava no R2 e a URL pública devolve os mesmos bytes', 
       return {
         bind(...args: unknown[]) { values = args; return this; },
         async first() {
-          if (sql.includes('admin_sessions')) return { token_hash: 'valid-session' };
+          if (sql.includes('admin_sessions')) return { user_id: 1 };
           return rows.get(String(values[0])) ?? null;
         },
         async run() {

@@ -7,13 +7,14 @@
     "dev": "wrangler dev --port 8787",
     "build": "wrangler deploy --dry-run",
     "deploy": "wrangler deploy",
-    "test": "node --import tsx --test worker/*.test.ts",
+    "test": "node --import ./scripts/register-wasm.mjs --import tsx --test worker/*.test.ts",
     "db:create": "wrangler d1 create projeto-kaingang",
     "db:migrate:local": "wrangler d1 migrations apply DB --local",
     "db:migrate:remote": "wrangler d1 migrations apply DB --remote",
     "lint": "tsc --noEmit"
   },
   "dependencies": {
+    "argon2id": "^1.0.1",
     "hono": "^4.13.16",
     "zod": "^4.6.7"
   },

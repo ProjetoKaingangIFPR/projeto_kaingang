@@ -4,7 +4,7 @@ import app from './index';
 import type { Env } from './env';
 
 test('API aceita a origem configurada e bloqueia gravações de outra origem', async () => {
-  const env = { FRONTEND_ORIGIN: 'https://site.example.com' } as Env;
+  const env = { FRONTEND_ORIGIN: 'https://site.example.com', DB: { prepare: () => ({ first: async () => null }) } } as unknown as Env;
   const request = (origin: string) => new Request('https://api.example.com/api/admin/login', {
     method: 'POST', headers: { Origin: origin, 'Content-Type': 'application/json' }, body: '{}',
   });

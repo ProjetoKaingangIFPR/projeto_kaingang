@@ -9,6 +9,7 @@ export default function AdminPage() {
   const [password, setPassword] = useState('');
   const [error, setError] = useState('');
   const [busy, setBusy] = useState(false);
+  const [notice, setNotice] = useState('');
   const checkSession = () => {
     setError('');
     api<{ authenticated: boolean; configured: boolean }>('/api/admin/session')
@@ -20,6 +21,7 @@ export default function AdminPage() {
     event.preventDefault();
     setBusy(true);
     setError('');
+    setNotice('');
     try {
       await api('/api/admin/login', { method: 'POST', body: JSON.stringify({ username, password }) });
       setPassword('');
@@ -28,7 +30,7 @@ export default function AdminPage() {
     finally { setBusy(false); }
   };
 
-  if (session?.authenticated) return <VirtualVisitsPage administrative onSessionEnd={() => setSession({ authenticated: false, configured: true })} />;
+  if (session?.authenticated) return <VirtualVisitsPage administrative onSessionEnd={(message) => { setNotice(message || ''); setSession({ authenticated: false, configured: true }); }} />;
 
   return (
     <main className="min-h-screen bg-[#101812] text-white flex items-center justify-center px-4 py-12">
@@ -43,7 +45,8 @@ export default function AdminPage() {
             <div role="status" className="text-sm text-white/70">{error || 'Verificando acesso…'}{error && <button onClick={checkSession} className="block underline mt-3">Tentar novamente</button>}</div>
           ) : (
             <form onSubmit={login} className="space-y-5">
-              {!session.configured && <p role="alert" className="text-sm text-amber-200">O acesso administrativo ainda não foi configurado. Defina ADMIN_USERNAME e ADMIN_PASSWORD no .env e reinicie o servidor.</p>}
+              {!session.configured && <p role="alert" className="text-sm text-amber-200">O acesso administrativo ainda não está disponível. Contate o responsável pelo site.</p>}
+              {notice && <p role="status" className="text-sm text-green-200">{notice}</p>}
               <div><label htmlFor="admin-username" className="block text-sm mb-2">Usuário</label><input id="admin-username" autoComplete="username" required value={username} onChange={e => setUsername(e.target.value)} className="w-full rounded-lg border border-white/20 bg-black/25 px-3 py-3 outline-none focus:ring-2 focus:ring-white/50" /></div>
               <div><label htmlFor="admin-password" className="block text-sm mb-2">Senha</label><input id="admin-password" type="password" autoComplete="current-password" required value={password} onChange={e => setPassword(e.target.value)} className="w-full rounded-lg border border-white/20 bg-black/25 px-3 py-3 outline-none focus:ring-2 focus:ring-white/50" /></div>
               {error && <p role="alert" className="text-sm text-red-300">{error}</p>}
