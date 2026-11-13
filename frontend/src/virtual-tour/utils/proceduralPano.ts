@@ -54,13 +54,14 @@ export const PRESET_PANOS: PresetPano[] = [
 const panoCache = new Map<string, string>();
 
 /**
- * Resolves a panorama source safely: if it's already a Data URL (uploaded image) or external HTTP/Blob URL,
- * returns it directly. Otherwise generates the requested procedural preset.
+ * Preserves uploaded media paths and image URLs. Only preset identifiers
+ * are rendered as procedural panoramas.
  */
 export function resolvePanoramaSource(urlOrPreset?: string): string {
   if (!urlOrPreset) return getProceduralPanorama('grand_atrium');
   const clean = urlOrPreset.trim();
   if (
+    (clean.startsWith('/') && !clean.startsWith('//') && !clean.includes('\\')) ||
     clean.startsWith('data:image') ||
     clean.startsWith('data:') ||
     clean.startsWith('http://') ||
