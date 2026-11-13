@@ -30,7 +30,7 @@ export async function verifyPassword(encoded: string, password: string): Promise
   // Só aceitamos o formato emitido aqui, impedindo parâmetros de custo arbitrário.
   const match = /^\$argon2id\$v=19\$m=19456,t=2,p=1\$([A-Za-z0-9+/]{22})\$([A-Za-z0-9+/]{43})$/.exec(encoded);
   if (!match) return false;
-  if (encoder.encode(password).length < 8) return false;
+  if (!password) return false;
   const digest = await derive(password, decode(match[1]));
   return timingSafeEqual(encode(digest), match[2]);
 }

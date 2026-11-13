@@ -21,7 +21,7 @@ app.use('/api/*', async (c,next) => {
 });
 app.get('/api/admin/session', async c => c.json({authenticated:c.get('authenticated'),configured:Boolean(await getAdmin(c.env.DB)) || bootstrapConfigured(c.env)}));
 app.post('/api/admin/login',bodyLimit({maxSize:4096}),async c => {
- if (!await getAdmin(c.env.DB) && !bootstrapConfigured(c.env)) return c.json({error:'Configure as credenciais iniciais com uma senha de pelo menos 12 caracteres.'},503);
+ if (!await getAdmin(c.env.DB) && !bootstrapConfigured(c.env)) return c.json({error:'Configure usuário e senha iniciais válidos. A senha deve ter até 1024 caracteres e não pode ser vazia.'},503);
  const now=Date.now(); const client=await hashToken(c.req.header('CF-Connecting-IP') || 'local');
  if (!await reserveAttempt(c.env.DB,client,now)) return c.json({error:'Muitas tentativas. Aguarde 15 minutos.'},429);
  const parsed=loginSchema.safeParse(await c.req.json().catch(()=>null));
@@ -46,7 +46,7 @@ app.post('/api/admin/password',bodyLimit({maxSize:8192}),async c=>{
  const client=await hashToken(`password:${c.req.header('CF-Connecting-IP') || 'local'}`);
  if (!await reserveAttempt(c.env.DB,client,now)) return c.json({error:'Muitas tentativas. Aguarde 15 minutos.'},429);
  const parsed=changePasswordSchema.safeParse(await c.req.json().catch(()=>null));
- if (!parsed.success) return c.json({error:'Informe a senha atual e uma nova senha de 12 a 1024 caracteres.'},400);
+ if (!parsed.success) return c.json({error:'Informe a senha atual e uma nova senha não vazia de até 1024 caracteres.'},400);
  const user=await getAdmin(c.env.DB);
  if (!user || user.id!==c.get('userId') || !await verifyPassword(user.password_hash,parsed.data.currentPassword)) return c.json({error:'Senha atual inválida.'},401);
  if (parsed.data.currentPassword===parsed.data.newPassword) return c.json({error:'Escolha uma senha diferente da atual.'},400);
