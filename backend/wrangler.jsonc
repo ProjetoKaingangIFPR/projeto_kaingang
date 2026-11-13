@@ -3,6 +3,13 @@
   "name": "projeto-kaingang",
   "main": "worker/index.ts",
   "compatibility_date": "2026-11-02",
+  "observability": {
+    "logs": {
+      "enabled": true,
+      "invocation_logs": true,
+      "persist": true
+    }
+  },
   "r2_buckets": [
     {
       "binding": "MEDIA",
