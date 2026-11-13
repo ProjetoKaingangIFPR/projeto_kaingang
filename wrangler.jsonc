@@ -9,12 +9,17 @@
     "not_found_handling": "single-page-application",
     "run_worker_first": ["/api/*"]
   },
+  "r2_buckets": [
+    {
+      "binding": "MEDIA",
+      "bucket_name": "projeto-kaingang-media"
+    }
+  ],
   "d1_databases": [
     {
       "binding": "DB",
       "database_name": "projeto-kaingang",
-      // Substitua pelo ID retornado por npm run db:create antes do deploy.
-      "database_id": "00000000-0000-0000-0000-000000000000",
+      "database_id": "eacbd4a8-4faf-474c-8114-b2a61a16be1d",
       "migrations_dir": "migrations"
     }
   ]

@@ -2,7 +2,6 @@ import { Hono } from 'hono';
 import { getCookie, setCookie } from 'hono/cookie';
 import { timingSafeEqual } from 'hono/utils/buffer';
 import { bodyLimit } from 'hono/body-limit';
-import { AwsClient } from 'aws4fetch';
 import type { Env } from './env';
 import { tourSchema } from './tour-schema';
 import { loadTour, saveTour } from './tour-store';
@@ -41,28 +40,23 @@ app.post('/api/admin/logout',async c=>{const token=getCookie(c,cookie);if(token)
 app.get('/api/tour',async c=>c.json({tour:await loadTour(c.env.DB)}));
 app.use('/api/admin/*',async(c,next)=>{if(!c.get('authenticated'))return c.json({error:'Entre novamente para continuar.'},401);await next();});
 app.put('/api/admin/tour',bodyLimit({maxSize:1000000}),async c=>{const parsed=tourSchema.safeParse(await c.req.json());if(!parsed.success)return c.json({error:parsed.error.issues[0]?.message || 'Planta inválida.'},400);await saveTour(c.env.DB,parsed.data);return c.json({saved:true});});
-function storage(env:Env){
- if(!env.OCI_S3_ENDPOINT || !env.OCI_BUCKET || !env.OCI_REGION || !env.OCI_ACCESS_KEY_ID || !env.OCI_SECRET_ACCESS_KEY)throw new Error('Oracle não configurada');
- const endpoint=new URL(env.OCI_S3_ENDPOINT);if(endpoint.protocol!=='https:')throw new Error('Endpoint inválido');
- return {client:new AwsClient({accessKeyId:env.OCI_ACCESS_KEY_ID,secretAccessKey:env.OCI_SECRET_ACCESS_KEY,region:env.OCI_REGION,service:'s3'}),url:(key:string)=>`${endpoint.origin}/${encodeURIComponent(env.OCI_BUCKET!)}/${key.split('/').map(encodeURIComponent).join('/')}`};
-}
 app.post('/api/admin/media',bodyLimit({maxSize:20*1024*1024}),async c=>{
  const type=c.req.header('Content-Type')?.split(';')[0];
  if(!['image/jpeg','image/png','image/webp'].includes(type || ''))return c.json({error:'Envie uma imagem JPEG, PNG ou WebP.'},415);
  const bytes=await c.req.arrayBuffer();const b=new Uint8Array(bytes);
  const valid=type==='image/jpeg'?b[0]===255&&b[1]===216&&b[2]===255:type==='image/png'?b[0]===137&&b[1]===80&&b[2]===78&&b[3]===71:new TextDecoder().decode(b.slice(0,4))==='RIFF'&&new TextDecoder().decode(b.slice(8,12))==='WEBP';
  if(!valid)return c.json({error:'Arquivo de imagem inválido.'},400);
- let s;try{s=storage(c.env);}catch{return c.json({error:'Configure o armazenamento Oracle para enviar imagens.'},503);}
+ if(!c.env.MEDIA)return c.json({error:'Configure o bucket R2 para enviar imagens.'},503);
  const id=crypto.randomUUID(),key=`tours/${id}`;
- const response=await s.client.fetch(s.url(key),{method:'PUT',headers:{'Content-Type':type!},body:bytes});
- if(!response.ok)return c.json({error:'Falha no envio à Oracle.'},502);
+ await c.env.MEDIA.put(key,bytes,{httpMetadata:{contentType:type!}});
  await c.env.DB.prepare('INSERT INTO media VALUES (?,?,?,?,?)').bind(id,key,type,bytes.byteLength,Date.now()).run();
  return c.json({url:`/api/media/${id}`},201);
 });
 app.get('/api/media/:id',async c=>{
  const media=await c.env.DB.prepare('SELECT object_key, content_type FROM media WHERE id = ?').bind(c.req.param('id')).first<{object_key:string;content_type:string}>();if(!media)return c.json({error:'Imagem não encontrada.'},404);
- const s=storage(c.env);const response=await s.client.fetch(s.url(media.object_key));if(!response.ok)return c.json({error:'Imagem indisponível.'},502);
- return new Response(response.body,{headers:{'Content-Type':media.content_type,'Cache-Control':'public, max-age=31536000, immutable','X-Content-Type-Options':'nosniff'}});
+ if(!c.env.MEDIA)return c.json({error:'Configure o bucket R2 para acessar imagens.'},503);
+ const object=await c.env.MEDIA.get(media.object_key);if(!object)return c.json({error:'Imagem não encontrada.'},404);
+ return new Response(object.body,{headers:{'Content-Type':media.content_type,'Cache-Control':'public, max-age=31536000, immutable','X-Content-Type-Options':'nosniff'}});
 });
 app.all('/api/*',c=>c.json({error:'Recurso não encontrado.'},404));
 app.all('*',c=>c.env.ASSETS.fetch(c.req.raw));
