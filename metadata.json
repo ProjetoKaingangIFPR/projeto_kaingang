@@ -1,6 +1,0 @@
-{
-  "name": "Memórias Vivas - Escola Indígena & Natureza",
-  "description": "Página inicial institucional com acervo fotográfico cultural, visitas virtuais e memórias da comunidade escolar.",
-  "requestFramePermissions": [],
-  "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
-}

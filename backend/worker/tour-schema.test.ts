@@ -1,7 +1,7 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { tourSchema } from './tour-schema';
-import { DEFAULT_TOUR } from '../src/virtual-tour/data/defaultTour';
+import { DEFAULT_TOUR } from './fixtures/defaultTour';
 test('aceita o tour padrão e rejeita imagens embutidas e conexões inexistentes',()=>{
  assert.equal(tourSchema.safeParse(DEFAULT_TOUR).success,true);
  const tour=structuredClone(DEFAULT_TOUR);

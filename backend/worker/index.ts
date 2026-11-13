@@ -11,7 +11,7 @@ const cookie = 'kaingang_admin';
 app.use('/api/*', async (c,next) => {
  c.header('Cache-Control','no-store');
  c.header('X-Content-Type-Options','nosniff');
- if (!['GET','HEAD'].includes(c.req.method) && ((c.req.header('Origin') && c.req.header('Origin') !== new URL(c.req.url).origin) || c.req.header('Sec-Fetch-Site') === 'cross-site')) return c.json({error:'Origem não permitida.'},403);
+ if (!['GET','HEAD'].includes(c.req.method) && (c.req.header('Origin') && ![new URL(c.req.url).origin,c.env.FRONTEND_ORIGIN].includes(c.req.header('Origin')))) return c.json({error:'Origem não permitida.'},403);
  const token = getCookie(c,cookie);
  const version = await hash(`${c.env.ADMIN_USERNAME}\0${c.env.ADMIN_PASSWORD}`);
  const session = token && c.env.ADMIN_PASSWORD && await c.env.DB.prepare('SELECT token_hash FROM admin_sessions WHERE token_hash = ? AND credential_version = ? AND expires_at > ?').bind(await hash(token),version,Date.now()).first();
@@ -59,6 +59,6 @@ app.get('/api/media/:id',async c=>{
  return new Response(object.body,{headers:{'Content-Type':media.content_type,'Cache-Control':'public, max-age=31536000, immutable','X-Content-Type-Options':'nosniff'}});
 });
 app.all('/api/*',c=>c.json({error:'Recurso não encontrado.'},404));
-app.all('*',c=>c.env.ASSETS.fetch(c.req.raw));
+app.all('*',c=>c.json({error:'Recurso não encontrado.'},404));
 app.onError((error,c)=>{console.error(error.message);return c.json({error:'Não foi possível concluir a operação.'},500);});
 export default app;

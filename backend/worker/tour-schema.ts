@@ -1,5 +1,5 @@
 import { z } from 'zod';
-import type { TourData } from '../src/virtual-tour/types';
+import type { TourData } from './tour-types';
 
 const id = z.string().min(1).max(120);
 const text = z.string().max(10000);

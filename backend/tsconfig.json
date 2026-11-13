@@ -5,8 +5,8 @@
     "useDefineForClassFields": false,
     "module": "ESNext",
     "types": [
-      "vite/client",
-      "@cloudflare/workers-types"
+      "@cloudflare/workers-types",
+      "node"
     ],
     "lib": [
       "ES2022",
@@ -19,12 +19,10 @@
     "moduleDetection": "force",
     "allowJs": true,
     "jsx": "react-jsx",
-    "paths": {
-      "@/*": [
-        "./*"
-      ]
-    },
     "allowImportingTsExtensions": true,
     "noEmit": true
-  }
+  },
+  "include": [
+    "worker"
+  ]
 }

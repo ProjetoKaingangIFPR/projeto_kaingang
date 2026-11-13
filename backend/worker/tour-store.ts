@@ -1,4 +1,4 @@
-import type { TourData } from '../src/virtual-tour/types';
+import type { TourData } from './tour-types';
 
 const SLOT = 'published';
 
