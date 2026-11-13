@@ -4,6 +4,8 @@ API Hono em Cloudflare Workers, dados relacionais em D1 e imagens em bucket priv
 
 ## Desenvolvimento
 
+a
+
 1. Execute `npm install` e configure `.env` conforme `.env.example`. As chaves Oracle são Customer Secret Keys (Access Key e Secret Key), com permissão de leitura e escrita no bucket Standard.
 2. Execute `npm run db:migrate:local` para criar as tabelas no D1 local.
 3. Em um terminal execute `npm run dev:api` e em outro `npm run dev`. Acesse o Vite na porta 5173. `/api` é encaminhado para o Worker na porta 8787.
