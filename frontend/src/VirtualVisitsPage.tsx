@@ -1,5 +1,6 @@
 import React, { useCallback, useEffect, useState } from "react";
-import { Compass, ArrowLeft } from "lucide-react";
+import { Compass, ArrowLeft, ArrowRight } from "lucide-react";
+import { Navbar } from "./components/layout/Navbar";
 import { TourData, EditorMode } from "./virtual-tour/types";
 import { DEFAULT_TOUR } from "./virtual-tour/data/defaultTour";
 import { Header } from "./virtual-tour/components/Header";
@@ -9,13 +10,80 @@ import { FloorPlanEditor } from "./virtual-tour/components/FloorPlanEditor";
 import { api, ApiError } from "./admin/api";
 import ChangePasswordModal from "./admin/ChangePasswordModal";
 
-export default function VirtualVisitsPage({
-  administrative = false,
-  onSessionEnd,
-}: {
+type VirtualVisitsPageProps = {
   administrative?: boolean;
   onSessionEnd?: (message?: string) => void;
-}) {
+};
+
+export default function VirtualVisitsPage(props: VirtualVisitsPageProps) {
+  const [visitStarted, setVisitStarted] = useState(false);
+
+  const startVisit = () => {
+    setVisitStarted(true);
+    window.scrollTo(0, 0);
+  };
+
+  const navigateFromIntro = (id: string) => {
+    if (id === "visitas" || id === "visitas-info") return;
+    const destination = id === "sobre"
+      ? "/sobre"
+      : id === "historias"
+        ? "/historias-contadas"
+        : `/#${id === "escola" ? "memorias-escola" : id}`;
+    window.history.pushState({}, "", destination);
+    window.dispatchEvent(new PopStateEvent("popstate"));
+    window.setTimeout(() => {
+      const target = document.getElementById(id === "escola" ? "memorias-escola" : id);
+      if (target) target.scrollIntoView();
+      else window.scrollTo(0, 0);
+    }, 0);
+  };
+
+  if (props.administrative || visitStarted) {
+    return <VirtualTourExperience {...props} />;
+  }
+
+  return (
+    <div className="min-h-screen bg-neutral-950 font-sans text-white selection:bg-[#8B0000] selection:text-white">
+      <Navbar activeSection="visitas" onSelectNav={navigateFromIntro} />
+      <main>
+        <section
+          aria-labelledby="visitas-titulo"
+          className="relative isolate flex min-h-[calc(100svh-3.5rem)] items-center justify-center px-6 py-20 md:min-h-[calc(100svh-4rem)]"
+          style={{
+            backgroundImage: 'url("/images/intro_visita_virtual.jpg")',
+            backgroundSize: "cover",
+            backgroundPosition: "center",
+          }}
+        >
+          <div aria-hidden="true" className="absolute inset-0 -z-10 bg-black/30" />
+          <div className="mx-auto w-full max-w-3xl text-center">
+            <h1 id="visitas-titulo" className="text-4xl font-semibold leading-tight sm:text-6xl">
+              Visitas virtuais
+            </h1>
+            <p className="mt-6 text-lg leading-relaxed text-white sm:text-2xl sm:leading-relaxed">
+              Nesta página você poderá conhecer o espaço físico e geográfico da Escola
+              Segsõ Tánh Sá e da Aldeia Kaingang. Sejam bem-vindos!
+            </p>
+            <button
+              type="button"
+              onClick={startVisit}
+              className="mt-10 inline-flex cursor-pointer items-center justify-center gap-3 rounded-[3px] bg-[#8B0000] px-7 py-4 font-semibold text-white shadow-lg transition-colors hover:bg-[#a30000] focus-visible:outline-2 focus-visible:outline-offset-4 focus-visible:outline-white"
+            >
+              Acessar a visita
+              <ArrowRight aria-hidden="true" className="h-5 w-5" />
+            </button>
+          </div>
+        </section>
+      </main>
+    </div>
+  );
+}
+
+function VirtualTourExperience({
+  administrative = false,
+  onSessionEnd,
+}: VirtualVisitsPageProps) {
   const [tourData, setTourData] = useState<TourData>(DEFAULT_TOUR);
   const [mode, setMode] = useState<EditorMode>(
     administrative ? "editor" : "view",

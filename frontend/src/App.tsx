@@ -9,6 +9,7 @@ import { ContentMode } from "./types";
 import VirtualVisitsPage from "./VirtualVisitsPage";
 import AdminPage from "./admin/AdminPage";
 import { AboutSection } from "./components/sections/AboutSection";
+import { StoriesSection } from "./components/sections/StoriesSection";
 
 function MainApp() {
   const [activeSection, setActiveSection] = useState("inicio");
@@ -16,8 +17,8 @@ function MainApp() {
 
   const handleNavSelect = (id: string) => {
     setActiveSection(id);
-    if (id === "sobre") {
-      window.history.pushState({}, "", "/sobre");
+    if (id === "sobre" || id === "historias") {
+      window.history.pushState({}, "", id === "sobre" ? "/sobre" : "/historias-contadas");
       window.dispatchEvent(new PopStateEvent("popstate"));
       window.scrollTo(0, 0);
       return;
@@ -34,8 +35,7 @@ function MainApp() {
       id === "contato" ||
       id === "fale-conosco" ||
       id === "sobre" ||
-      id === "manual" ||
-      id === "historias"
+      id === "manual"
     ) {
       const el =
         document.getElementById(id) ||
@@ -83,9 +83,16 @@ export default function App() {
 
   if (pathname === "/painel" || pathname === "/painel/") return <AdminPage />;
 
-  if (pathname === "/sobre" || pathname === "/sobre/") {
+  const isStoriesPage = pathname === "/historias-contadas" || pathname === "/historias-contadas/";
+
+  if (pathname === "/sobre" || pathname === "/sobre/" || isStoriesPage) {
     const navigateFromAbout = (id: string) => {
-      if (id === "sobre") return;
+      if (id === "sobre" || id === "historias") {
+        window.history.pushState({}, "", id === "sobre" ? "/sobre" : "/historias-contadas");
+        window.dispatchEvent(new PopStateEvent("popstate"));
+        window.scrollTo(0, 0);
+        return;
+      }
       const tour = id === "visitas" || id === "visitas-info";
       window.history.pushState({}, "", tour ? "/visitas-virtuais" : `/#${id}`);
       window.dispatchEvent(new PopStateEvent("popstate"));
@@ -97,8 +104,8 @@ export default function App() {
     };
     return (
       <div className="min-h-screen bg-neutral-950 font-sans flex flex-col">
-        <Navbar activeSection="sobre" onSelectNav={navigateFromAbout} />
-        <main className="flex-1"><AboutSection /></main>
+        <Navbar activeSection={isStoriesPage ? "historias" : "sobre"} onSelectNav={navigateFromAbout} />
+        <main className="flex-1">{isStoriesPage ? <StoriesSection /> : <AboutSection />}</main>
         <Footer onSelectNav={navigateFromAbout} />
       </div>
     );

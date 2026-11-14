@@ -19,7 +19,7 @@ export const NAVIGATION_ITEMS: NavItem[] = [
   {
     id: "historias",
     label: "Memórias em histórias contadas",
-    href: "#historias-contadas",
+    href: "/historias-contadas",
     description:
       "Narrativas orais dos anciãos, lendas dos povos originários e saberes dos pajés gravados pela comunidade.",
   },
