@@ -40,7 +40,7 @@ export const NAVIGATION_ITEMS: NavItem[] = [
   {
     id: "sobre",
     label: "Sobre o site",
-    href: "#sobre",
+    href: "/sobre",
     description:
       "Projeto de extensão e salvaguarda do patrimônio imaterial da comunidade e sua escola.",
   },

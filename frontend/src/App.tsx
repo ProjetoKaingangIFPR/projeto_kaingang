@@ -8,6 +8,7 @@ import { Footer } from "./components/layout/Footer";
 import { ContentMode } from "./types";
 import VirtualVisitsPage from "./VirtualVisitsPage";
 import AdminPage from "./admin/AdminPage";
+import { AboutSection } from "./components/sections/AboutSection";
 
 function MainApp() {
   const [activeSection, setActiveSection] = useState("inicio");
@@ -15,6 +16,12 @@ function MainApp() {
 
   const handleNavSelect = (id: string) => {
     setActiveSection(id);
+    if (id === "sobre") {
+      window.history.pushState({}, "", "/sobre");
+      window.dispatchEvent(new PopStateEvent("popstate"));
+      window.scrollTo(0, 0);
+      return;
+    }
     if (id === "inicio") {
       window.scrollTo({ top: 0, behavior: "smooth" });
     } else if (id === "visitas" || id === "visitas-info") {
@@ -75,6 +82,27 @@ export default function App() {
   }, []);
 
   if (pathname === "/painel" || pathname === "/painel/") return <AdminPage />;
+
+  if (pathname === "/sobre" || pathname === "/sobre/") {
+    const navigateFromAbout = (id: string) => {
+      if (id === "sobre") return;
+      const tour = id === "visitas" || id === "visitas-info";
+      window.history.pushState({}, "", tour ? "/visitas-virtuais" : `/#${id}`);
+      window.dispatchEvent(new PopStateEvent("popstate"));
+      window.setTimeout(() => {
+        const target = document.getElementById(id === "escola" ? "memorias-escola" : id);
+        if (target) target.scrollIntoView();
+        else window.scrollTo(0, 0);
+      }, 0);
+    };
+    return (
+      <div className="min-h-screen bg-neutral-950 font-sans flex flex-col">
+        <Navbar activeSection="sobre" onSelectNav={navigateFromAbout} />
+        <main className="flex-1"><AboutSection /></main>
+        <Footer onSelectNav={navigateFromAbout} />
+      </div>
+    );
+  }
 
   if (pathname === "/visitas-virtuais") {
     return <VirtualVisitsPage />;
