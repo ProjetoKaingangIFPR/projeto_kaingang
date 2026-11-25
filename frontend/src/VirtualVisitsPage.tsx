@@ -13,6 +13,7 @@ import ChangePasswordModal from "./admin/ChangePasswordModal";
 type VirtualVisitsPageProps = {
   administrative?: boolean;
   onSessionEnd?: (message?: string) => void;
+  onBackToAdmin?: () => void;
 };
 
 export default function VirtualVisitsPage(props: VirtualVisitsPageProps) {
@@ -44,36 +45,37 @@ export default function VirtualVisitsPage(props: VirtualVisitsPageProps) {
   }
 
   return (
-    <div className="min-h-screen bg-neutral-950 font-sans text-white selection:bg-[#8B0000] selection:text-white">
+    <div className="min-h-screen bg-[#730000] font-sans text-white selection:bg-white selection:text-[#730000]">
       <Navbar activeSection="visitas" onSelectNav={navigateFromIntro} />
-      <main>
+      <main className="relative isolate before:absolute before:inset-x-0 before:bottom-0 before:-z-10 before:h-1/4 before:bg-black md:before:inset-y-0 md:before:left-[68%] md:before:h-auto">
         <section
           aria-labelledby="visitas-titulo"
-          className="relative isolate flex min-h-[calc(100svh-3.5rem)] items-center justify-center px-6 py-20 md:min-h-[calc(100svh-4rem)]"
-          style={{
-            backgroundImage: 'url("/images/intro_visita_virtual.jpg")',
-            backgroundSize: "cover",
-            backgroundPosition: "center",
-          }}
+          className="mx-auto grid min-h-[calc(100svh-3.5rem)] max-w-7xl content-center items-center gap-8 px-5 py-10 sm:px-8 md:min-h-[calc(100svh-4rem)] md:grid-cols-[5fr_7fr] md:gap-10 md:py-16 lg:gap-16 lg:px-12"
         >
-          <div aria-hidden="true" className="absolute inset-0 -z-10 bg-black/30" />
-          <div className="mx-auto w-full max-w-3xl text-center">
-            <h1 id="visitas-titulo" className="text-4xl font-semibold leading-tight sm:text-6xl">
+          <div className="max-w-xl">
+            <h1 id="visitas-titulo" className="text-5xl font-medium leading-[0.96] tracking-tight sm:text-6xl lg:text-8xl">
               Visitas virtuais
             </h1>
-            <p className="mt-6 text-lg leading-relaxed text-white sm:text-2xl sm:leading-relaxed">
+            <p className="mt-6 max-w-sm text-lg leading-relaxed text-white/85">
               Nesta página você poderá conhecer o espaço físico e geográfico da Escola
               Segsõ Tánh Sá e da Aldeia Kaingang. Sejam bem-vindos!
             </p>
             <button
               type="button"
               onClick={startVisit}
-              className="mt-10 inline-flex cursor-pointer items-center justify-center gap-3 rounded-[3px] bg-[#8B0000] px-7 py-4 font-semibold text-white shadow-lg transition-colors hover:bg-[#a30000] focus-visible:outline-2 focus-visible:outline-offset-4 focus-visible:outline-white"
+              className="mt-7 inline-flex cursor-pointer items-center justify-center gap-3 rounded-[3px] border border-white/70 px-7 py-4 font-semibold text-white transition-colors hover:bg-white hover:text-[#730000] focus-visible:outline-2 focus-visible:outline-offset-4 focus-visible:outline-white"
             >
               Acessar a visita
               <ArrowRight aria-hidden="true" className="h-5 w-5" />
             </button>
           </div>
+          <img
+            src="/images/intro_visita_virtual.jpg"
+            alt="Araucária ao lado de uma estrada de terra sob o céu azul."
+            width={640}
+            height={480}
+            className="h-auto w-full max-w-[640px] justify-self-center shadow-[0_12px_32px_rgba(0,0,0,0.16)] md:justify-self-end"
+          />
         </section>
       </main>
     </div>
@@ -83,6 +85,7 @@ export default function VirtualVisitsPage(props: VirtualVisitsPageProps) {
 function VirtualTourExperience({
   administrative = false,
   onSessionEnd,
+  onBackToAdmin,
 }: VirtualVisitsPageProps) {
   const [tourData, setTourData] = useState<TourData>(DEFAULT_TOUR);
   const [mode, setMode] = useState<EditorMode>(
@@ -229,6 +232,10 @@ function VirtualTourExperience({
       !window.confirm("Há alterações não salvas. Deseja sair e descartá-las?")
     )
       return;
+    if (onBackToAdmin) {
+      onBackToAdmin();
+      return;
+    }
     window.history.pushState({}, "", "/");
     window.dispatchEvent(new PopStateEvent("popstate"));
   };
@@ -242,7 +249,7 @@ function VirtualTourExperience({
           className="inline-flex items-center gap-2 rounded-xl px-3 py-2 text-xs font-semibold text-white/80 transition-colors hover:bg-white/10 hover:text-white cursor-pointer"
         >
           <ArrowLeft className="h-4 w-4" />
-          Voltar ao site
+          {onBackToAdmin ? "Voltar ao painel" : "Voltar ao site"}
         </button>
         <div className="hidden items-center gap-2 text-xs font-semibold text-white/60 sm:flex">
           <Compass className="h-4 w-4" />

@@ -1,4 +1,5 @@
 import { ArrowDown } from "lucide-react";
+import { StoryGallery } from "./StoryGallery";
 
 export function StoriesSection() {
   const scrollToStories = () => {
@@ -46,13 +47,7 @@ export function StoriesSection() {
         </div>
       </section>
 
-      {/* Espaço reservado para o conteúdo que será fornecido depois. */}
-      <section
-        id="historias-conteudo"
-        aria-label="Conteúdo das histórias"
-        tabIndex={-1}
-        className="min-h-[70svh] scroll-mt-14 bg-neutral-900 outline-none md:scroll-mt-16"
-      />
+      <StoryGallery />
     </>
   );
 }

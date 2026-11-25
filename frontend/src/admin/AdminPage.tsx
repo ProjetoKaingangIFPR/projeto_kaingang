@@ -1,6 +1,8 @@
 import React, { useEffect, useState } from "react";
-import { ArrowLeft, LockKeyhole, MapPinned } from "lucide-react";
+import { ArrowLeft, BookOpen, LockKeyhole, MapPinned } from "lucide-react";
 import VirtualVisitsPage from "../VirtualVisitsPage";
+import StoryManager from "./StoryManager";
+import ChangePasswordModal from "./ChangePasswordModal";
 import { api } from "./api";
 
 export default function AdminPage() {
@@ -13,6 +15,8 @@ export default function AdminPage() {
   const [error, setError] = useState("");
   const [busy, setBusy] = useState(false);
   const [notice, setNotice] = useState("");
+  const [section, setSection] = useState<"home" | "visits" | "stories">("home");
+  const [changingPassword, setChangingPassword] = useState(false);
   const checkSession = () => {
     setError("");
     api<{ authenticated: boolean; configured: boolean }>("/api/admin/session")
@@ -42,16 +46,61 @@ export default function AdminPage() {
     }
   };
 
-  if (session?.authenticated)
+  function endSession(message = "") {
+    setNotice(message);
+    setSection("home");
+    setChangingPassword(false);
+    setSession({ authenticated: false, configured: true });
+  }
+
+  async function logout() {
+    setBusy(true);
+    setError("");
+    try {
+      await api("/api/admin/logout", { method: "POST" });
+      endSession();
+    } catch {
+      setError("Não foi possível sair. Tente novamente.");
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  if (session?.authenticated) {
+    const goHome = () => setSection("home");
+    if (section === "visits") {
+      return <VirtualVisitsPage administrative onBackToAdmin={goHome} onSessionEnd={endSession} />;
+    }
+    if (section === "stories") return <StoryManager onClose={goHome} />;
+
     return (
-      <VirtualVisitsPage
-        administrative
-        onSessionEnd={(message) => {
-          setNotice(message || "");
-          setSession({ authenticated: false, configured: true });
-        }}
-      />
+      <main className="min-h-screen bg-neutral-950 px-5 py-8 text-white sm:px-8 sm:py-12">
+        <div className="mx-auto max-w-5xl">
+          <nav aria-label="Conta administrativa" className="mb-12 flex flex-wrap items-center gap-x-6 gap-y-3 text-sm">
+            <a href="/" className="mr-auto inline-flex items-center gap-2 underline underline-offset-4 transition-colors hover:text-red-300"><ArrowLeft size={16} aria-hidden="true" /> Voltar ao site</a>
+            <button disabled={busy} onClick={() => setChangingPassword(true)} className="underline underline-offset-4 transition-colors hover:text-red-300 enabled:cursor-pointer disabled:opacity-50">Alterar senha</button>
+            <button disabled={busy} onClick={logout} className="underline underline-offset-4 transition-colors hover:text-red-300 enabled:cursor-pointer disabled:opacity-50">{busy ? "Saindo…" : "Sair"}</button>
+          </nav>
+          {error && <p role="alert" className="mb-4 text-red-300">{error}</p>}
+          <h1 className="mb-7 text-4xl font-semibold sm:text-5xl">Painel administrativo</h1>
+          <div className="grid gap-4 sm:grid-cols-2">
+            <button onClick={() => setSection("visits")} className="rounded-lg border border-white/15 bg-neutral-900 p-6 text-left cursor-pointer transition-colors hover:border-red-400/70 hover:bg-neutral-800 active:bg-neutral-700 focus-visible:outline-2 focus-visible:outline-offset-4">
+              <MapPinned aria-hidden="true" className="mb-4 text-red-300" />
+              <span className="font-display block text-2xl font-semibold">Visitas virtuais</span>
+              <span className="mt-2 block text-neutral-300">Editar a planta, os ambientes e os pontos da visita.</span>
+            </button>
+            <button onClick={() => setSection("stories")} className="rounded-lg border border-white/15 bg-neutral-900 p-6 text-left cursor-pointer transition-colors hover:border-red-400/70 hover:bg-neutral-800 active:bg-neutral-700 focus-visible:outline-2 focus-visible:outline-offset-4">
+              <BookOpen aria-hidden="true" className="mb-4 text-red-300" />
+              <span className="font-display block text-2xl font-semibold">Histórias contadas</span>
+              <span className="mt-2 block text-neutral-300">Publicar fotos e vídeos e gerenciar o armazenamento.</span>
+            </button>
+          </div>
+          {changingPassword && <ChangePasswordModal onClose={() => setChangingPassword(false)}
+            onChanged={() => endSession("Senha alterada. Entre novamente com a nova senha.")} />}
+        </div>
+      </main>
     );
+  }
 
   return (
     <main className="min-h-screen bg-[#101812] text-white flex items-center justify-center px-4 py-12">
@@ -71,7 +120,7 @@ export default function AdminPage() {
           </p>
           <h1 className="text-2xl font-bold">Painel administrativo</h1>
           <p className="text-sm text-white/65 mt-3 mb-6">
-            Entre para gerenciar a planta e os pontos da visita virtual.
+            Entre para gerenciar as histórias do acervo e a visita virtual.
           </p>
           {!session ? (
             <div role="status" className="text-sm text-white/70">

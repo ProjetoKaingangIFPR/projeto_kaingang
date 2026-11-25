@@ -1,0 +1,57 @@
+import assert from 'node:assert/strict';
+import { readFile } from 'node:fs/promises';
+import { test } from 'node:test';
+import { getPlatformProxy } from 'wrangler';
+import { stories } from './stories';
+import app from './index';
+import type { Env } from './env';
+
+test('reserva concorrente, alteração da cota e publicação multipart no D1 e R2 locais', async t => {
+  const platform = await getPlatformProxy<Env>({ persist: false, remoteBindings: false });
+  t.after(() => platform.dispose());
+  const env = platform.env;
+  const migration = await readFile(new URL('../migrations/0003_story_files.sql', import.meta.url), 'utf8');
+  await env.DB.batch(migration.split(';').filter(sql => sql.trim()).map(sql => env.DB.prepare(sql)));
+  const request = (path: string, method = 'GET', data?: unknown) => stories.request(path, {
+    method, body: data === undefined ? undefined : JSON.stringify(data),
+    headers: { 'Content-Type': 'application/json' },
+  }, env);
+  const admin = '/admin/stories';
+  assert.equal((await app.request('/api' + admin, {}, env)).status, 401);
+  const big = { title: 'Grande', files: [{ name: 'filme.mp4', type: 'video/mp4', size: 6e9 }] };
+  const results = await Promise.all([request(admin, 'POST', big), request(admin, 'POST', big)]);
+  assert.deepEqual(results.map(r => r.status).sort(), [201, 409]);
+  const first = await results.find(r => r.status === 201)!.json() as { ids: string[] };
+  assert.equal((await request(admin + '/quota', 'PUT', { capacity: 5e9 })).status, 409);
+  assert.equal((await request(admin + '/quota', 'PUT', { capacity: 12e9 })).status, 200);
+  const second = await request(admin, 'POST', big);
+  assert.equal(second.status, 201);
+  for (const id of [...first.ids, ...(await second.json() as { ids: string[] }).ids]) {
+    assert.equal((await request(admin + '/' + id, 'DELETE')).status, 200);
+  }
+  const partSize = 8 * 1024 * 1024;
+  const media = { title: 'Memória', files: [{ name: 'fala.mp4', type: 'video/mp4', size: partSize + 2 }] };
+  const created = await request(admin, 'POST', media);
+  const { ids: [id] } = await created.json() as { ids: string[] };
+  const path = admin + '/' + id;
+  assert.deepEqual(await (await request('/stories')).json(), []);
+  assert.equal((await request(path + '/start', 'POST')).status, 200);
+  const put = (number: number, body: Uint8Array<ArrayBuffer>) => stories.request(path + '/parts/' + number, { method: 'PUT', body }, env);
+  assert.equal((await put(1, new Uint8Array(2))).status, 400);
+  const parts = [];
+  for (const [index, data] of [new Uint8Array(partSize), new Uint8Array([42, 43])].entries()) {
+    const response = await put(index + 1, data);
+    assert.equal(response.status, 200);
+    parts.push(await response.json());
+  }
+  assert.equal((await request(path + '/finish', 'POST', parts)).status, 200);
+  assert.equal((await request(path + '/finish', 'POST', parts)).status, 200);
+  assert.equal((await (await request('/stories')).json() as unknown[]).length, 1);
+  const stream = await stories.request('/stories/' + id + '/media', { headers: { Range: 'bytes=-2' } }, env);
+  assert.equal(stream.status, 206);
+  assert.deepEqual(new Uint8Array(await stream.arrayBuffer()), new Uint8Array([42, 43]));
+  assert.equal((await request(path, 'DELETE')).status, 200);
+  assert.equal(await env.MEDIA.head('stories/' + id), null);
+  assert.deepEqual(await (await request('/stories')).json(), []);
+});
+

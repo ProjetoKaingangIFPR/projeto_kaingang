@@ -1,4 +1,5 @@
 @import "tailwindcss";
+@import "@fontsource-variable/source-serif-4/standard.css";
 
 @theme {
   --font-sans: 'Inter', system-ui, -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Oxygen, Ubuntu, Cantarell, sans-serif;
@@ -13,4 +14,11 @@ html {
 
 body {
   font-family: var(--font-sans);
+}
+
+@layer base {
+  h1, h2, h3, h4, h5, h6, .font-display {
+    font-family: 'Source Serif 4 Variable', Georgia, serif;
+    font-optical-sizing: auto;
+  }
 }

@@ -39,7 +39,9 @@ Para banco novo, npm run db:migrate:remote cria as tabelas. Deploy não aplica m
 
 A migração `0002_admin_accounts.sql` cria a conta administrativa no banco e substitui a tabela de sessões, encerrando todos os acessos antigos. Não altera o tour ou as imagens. Aplique-a antes de publicar o novo backend, preferencialmente em uma janela de manutenção: a versão antiga da API não funciona com a nova tabela de sessões.
 
-Se a migração inicial já está registrada pelo Wrangler, use `npm run db:migrate:remote` para aplicar apenas as pendentes. Se o SQL inicial foi executado manualmente no Console D1, execute somente o arquivo `0002_admin_accounts.sql` pelo Console; não reaplique `0001_virtual_tour.sql` sobre tabelas existentes.
+Se a migração inicial já está registrada pelo Wrangler, use `npm run db:migrate:remote` para aplicar as pendentes. Em bancos migrados manualmente pelo Console D1, aplique apenas os arquivos ainda pendentes em ordem numérica.
+
+A migração `0003_story_files.sql` cria o catálogo de histórias e define uma cota inicial de 10 GB para o acervo. O administrador pode alterá-la em **Histórias → Ajustar cota**. A cota inclui arquivos publicados e reservas de envios incompletos. O painel permite remover ambos. Os arquivos ficam sob o prefixo `stories/` do bucket privado `MEDIA`. A cota é própria do acervo e a cobrança do R2 considera o uso da conta.
 
 No primeiro login correto, o backend cria a conta no D1 usando as credenciais iniciais configuradas. Depois do primeiro login, remova ADMIN_USERNAME e ADMIN_PASSWORD do ambiente: os próximos logins usam exclusivamente a conta no banco. Deixar os valores antigos no ambiente não permite entrar com uma senha antiga após trocá-la.
 

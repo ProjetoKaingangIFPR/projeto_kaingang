@@ -2,6 +2,7 @@ import { Hono } from 'hono';
 import { getCookie, setCookie } from 'hono/cookie';
 import { bodyLimit } from 'hono/body-limit';
 import type { Env } from './env';
+import { stories } from './stories';
 import { tourSchema } from './tour-schema';
 import { loadTour, saveTour } from './tour-store';
 import { authenticate, bootstrapConfigured, changePasswordSchema, getAdmin, hashToken, loginSchema, reserveAttempt } from './auth';
@@ -11,7 +12,8 @@ const cookie = 'kaingang_admin';
 app.use('/api/*', async (c,next) => {
  c.header('Cache-Control','no-store');
  c.header('X-Content-Type-Options','nosniff');
- if (!['GET','HEAD'].includes(c.req.method) && (c.req.header('Origin') && ![new URL(c.req.url).origin,...(c.env.FRONTEND_ORIGIN || '').split(',').map(origin => origin.trim()).filter(Boolean)].includes(c.req.header('Origin')))) return c.json({error:'Origem não permitida.'},403);
+ const origin = c.req.header('Origin');
+ if (!['GET','HEAD'].includes(c.req.method) && origin && ![new URL(c.req.url).origin,...(c.env.FRONTEND_ORIGIN || '').split(',').map(value => value.trim()).filter(Boolean)].includes(origin)) return c.json({error:'Origem não permitida.'},403);
  const token = getCookie(c,cookie);
  const session = token ? await c.env.DB.prepare(`SELECT s.user_id FROM admin_sessions s JOIN admin_users u ON u.id = s.user_id
    WHERE s.token_hash = ? AND s.session_version = u.session_version AND s.expires_at > ?`).bind(await hashToken(token),Date.now()).first<{user_id: number}>() : null;
@@ -80,6 +82,7 @@ app.get('/api/media/:id',async c=>{
  const object=await c.env.MEDIA.get(media.object_key);if(!object)return c.json({error:'Imagem não encontrada.'},404);
  return new Response(object.body,{headers:{'Content-Type':media.content_type,'Cache-Control':'public, max-age=31536000, immutable','X-Content-Type-Options':'nosniff'}});
 });
+app.route('/api', stories);
 app.all('/api/*',c=>c.json({error:'Recurso não encontrado.'},404));
 app.all('*',c=>c.json({error:'Recurso não encontrado.'},404));
 app.onError((error,c)=>{console.error(error.message);return c.json({error:'Não foi possível concluir a operação.'},500);});
