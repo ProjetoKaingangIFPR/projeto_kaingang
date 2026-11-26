@@ -6,6 +6,7 @@ import { galleryImageUrl, MediaTile, type MediaFile } from './MediaTile';
 import MediaPreview from './MediaPreview';
 import { uploadParts, type UploadedPart } from './uploadParts';
 import { mediaFormats as formats, mediaAccept, normalizeMedia } from './mediaFormats';
+import RecordMetadataEditor, { type RecordMetadata } from './RecordMetadataEditor';
 
 type Storage = { files: StoryFile[]; capacity: number };
 type Reservation = { ids: string[]; chunkSize: number };
@@ -25,6 +26,7 @@ export default function StoryManager({ onClose }: { onClose: () => void }) {
   const [storage, setStorage] = useState<Storage | null>(null);
   const [files, setFiles] = useState<File[]>([]);
   const originals = useRef(new WeakMap<File, File>());
+  const metadata = useRef(new WeakMap<File, RecordMetadata>());
   const [preparing, setPreparing] = useState<{ name: string; index: number; total: number; percent: number } | null>(null);
   const preparationController = useRef<AbortController | null>(null);
   const [editing, setEditing] = useState(false);
@@ -131,7 +133,10 @@ export default function StoryManager({ onClose }: { onClose: () => void }) {
     setUploadTotal(uploadFiles.reduce((sum, file) => sum + file.size, 0));
     setSent(0);
     const batch = reservation ?? await api<Reservation>(endpoint, {
-      method: 'POST', body: JSON.stringify({ title: title.trim(), files: uploadFiles.map(({ name, size, type }) => ({ name, size, type })) }),
+      method: 'POST', body: JSON.stringify({ title: title.trim(), files: uploadFiles.map(file => ({
+        name: file.name, size: file.size, type: file.type,
+        ...metadata.current.get(originals.current.get(file) ?? file),
+      })) }),
     });
     setReservation(batch);
     const { ids, chunkSize } = batch;
@@ -298,7 +303,10 @@ export default function StoryManager({ onClose }: { onClose: () => void }) {
         </label>
         {!!files.length && <ul aria-label="Arquivos selecionados" className="grid max-h-[52svh] grid-cols-2 gap-4 overflow-y-auto p-1 sm:grid-cols-3">
           {files.map((file, index) => <MediaTile key={file.name + file.lastModified + index} file={file} size={bytes(file.size)}
-            onOpen={() => setPreview({ files, index })} onRemove={reservation ? undefined : () => setFiles(current => current.filter((_, i) => i !== index))}/>)}
+            onOpen={() => setPreview({ files, index })} onRemove={reservation ? undefined : () => setFiles(current => current.filter((_, i) => i !== index))}>
+              <RecordMetadataEditor disabled={!!reservation} value={metadata.current.get(originals.current.get(file) ?? file) ?? { author: null, recorded_on: null }}
+                onChange={value => metadata.current.set(originals.current.get(file) ?? file, value)}/>
+            </MediaTile>)}
         </ul>}
         {!!files.length && !uploadTotal && <p className="rounded-lg bg-neutral-800 p-3">{files.length} {files.length === 1 ? 'arquivo selecionado' : 'arquivos selecionados'} · {bytes(selected)}{storage && !exceeds && ' · Após o envio, ' + bytes(reservation ? available : available - selected) + ' disponíveis.'}</p>}
         {!!toPrepare.length && <p className="text-sm text-stone-300">Ao enviar, os vídeos serão otimizados automaticamente neste dispositivo. Mantenha esta aba aberta até concluir.</p>}
@@ -333,7 +341,13 @@ export default function StoryManager({ onClose }: { onClose: () => void }) {
               setPreview({ files: published, index: published.indexOf(file) });
             }} onRemove={selecting ? undefined : () => {
               if (window.confirm('Remover ' + file.name + ' do acervo e liberar o espaço?')) void perform(() => remove(file));
-            }}/>)}
+            }}>
+              {!selecting && <RecordMetadataEditor key={file.id + file.author + file.recorded_on}
+                value={{ author: file.author ?? null, recorded_on: file.recorded_on ?? null }} onSave={async value => {
+                  await api(endpoint + '/' + file.id, { method: 'PATCH', body: JSON.stringify(value) });
+                  await refresh();
+                }}/>}
+            </MediaTile>)}
           </ul>
         </> : <>
           <div className="mb-6 flex flex-wrap items-center justify-between gap-3">

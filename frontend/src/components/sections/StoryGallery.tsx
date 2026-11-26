@@ -10,6 +10,8 @@ export interface StoryFile {
   type: string;
   size: number;
   status: 'pending' | 'ready' | 'deleting';
+  author?: string | null;
+  recorded_on?: string | null;
 }
 
 function mediaLabel(file: StoryFile) {
@@ -25,6 +27,27 @@ export function StoryGallery({ onClose }: { onClose?: () => void } = {}) {
   const [failed, setFailed] = useState('');
   const [loaded, setLoaded] = useState('');
   const [sidebarOpen, setSidebarOpen] = useState(true);
+  const [popup, setPopup] = useState<{ file: StoryFile; left: number; top: number } | null>(null);
+  useEffect(() => {
+    const dismiss = () => setPopup(null);
+    const escape = (event: KeyboardEvent) => { if (event.key === 'Escape') dismiss(); };
+    window.addEventListener('scroll', dismiss, true);
+    window.addEventListener('resize', dismiss);
+    document.addEventListener('keydown', escape);
+    return () => {
+      window.removeEventListener('scroll', dismiss, true);
+      window.removeEventListener('resize', dismiss);
+      document.removeEventListener('keydown', escape);
+    };
+  }, []);
+  function showDetails(file: StoryFile, button: HTMLButtonElement) {
+    if (!file.author && !file.recorded_on) { setPopup(null); return; }
+    const rect = button.getBoundingClientRect();
+    const width = Math.min(240, window.innerWidth - 24);
+    const left = rect.right + 10 + width <= window.innerWidth
+      ? rect.right + 10 : Math.max(12, rect.left - width - 10);
+    setPopup({ file, left, top: Math.max(12, Math.min(rect.top, window.innerHeight - 150)) });
+  }
   const container = useRef<HTMLElement>(null);
   const storyTitle = useRef<HTMLHeadingElement>(null);
   const cardButtons = useRef(new Map<string, HTMLButtonElement>());
@@ -55,6 +78,7 @@ export function StoryGallery({ onClose }: { onClose?: () => void } = {}) {
     return () => window.removeEventListener('popstate', update);
   }, []);
   function chooseStory(id: string) {
+    setPopup(null);
     setSidebarOpen(true);
     window.history.pushState({}, '', id ? '#acervo?' + new URLSearchParams({ historia: id }) : '#acervo');
     lastCollection.current = collection;
@@ -72,7 +96,16 @@ export function StoryGallery({ onClose }: { onClose?: () => void } = {}) {
   }
 
   const groups = new Map(files.map(file => [file.collection, file.title]));
-  const items = files.filter(file => file.collection === collection);
+  const items = files.filter(file => file.collection === collection).sort((a, b) =>
+    a.recorded_on && b.recorded_on ? a.recorded_on.localeCompare(b.recorded_on)
+      : a.recorded_on ? -1 : b.recorded_on ? 1 : 0);
+  const dates = new Map<string, { file: StoryFile; position: number }[]>();
+  items.forEach((file, position) => {
+    const date = file.recorded_on ?? '';
+    const group = dates.get(date);
+    if (group) group.push({ file, position });
+    else dates.set(date, [{ file, position }]);
+  });
   const current = items[index];
   const url = current && '/api/stories/' + current.id + '/media';
   const previewUrl = (file: StoryFile) => '/api/stories/' + file.id + '/media' +
@@ -98,17 +131,30 @@ export function StoryGallery({ onClose }: { onClose?: () => void } = {}) {
           <button onClick={() => chooseStory('')} className={action}><ArrowLeft size={16}/> Todas as histórias</button>
           <h2 ref={storyTitle} tabIndex={-1} className="mt-5 break-words text-2xl outline-none">{current.title}</h2>
           <p className="mb-5 mt-2 text-sm text-white/60">Escolha uma foto, um vídeo ou um áudio.</p>
-          <div aria-label="Registros da história" className="flex max-h-64 gap-3 overflow-auto p-1 md:grid md:max-h-none md:grid-cols-2">
-            {items.map((file, position) => <button key={file.id} aria-pressed={index === position}
+          <div aria-label="Registros da história" className="max-h-72 space-y-5 overflow-y-auto p-1 md:max-h-none md:overflow-visible">
+            {Array.from(dates, ([date, entries]) => <section key={date} aria-label={date ? date.split('-').reverse().join('/') : 'Sem data'}>
+              <h3 className="mb-3 flex items-center justify-between border-b border-white/15 pb-2 text-base">
+                <span>{date ? <time dateTime={date}>{date.split('-').reverse().join('/')}</time> : 'Sem data'}</span>
+                <span className="font-sans text-sm text-white/50">{entries.length}</span>
+              </h3>
+              <div className="grid grid-cols-2 gap-3">
+            {entries.map(({ file, position }) => <button key={file.id} aria-pressed={index === position}
               aria-label={mediaLabel(file) + ' ' + (position + 1)}
+              aria-describedby={popup?.file.id === file.id ? 'record-details-popup' : undefined}
+              onPointerEnter={event => { if (event.pointerType !== 'touch') showDetails(file, event.currentTarget); }}
+              onPointerLeave={() => setPopup(null)}
+              onFocus={event => showDetails(file, event.currentTarget)}
+              onBlur={() => setPopup(null)}
               onClick={() => { setIndex(position); setFailed(''); }}
-              className={'group relative grid aspect-[4/3] w-28 shrink-0 cursor-pointer place-items-center overflow-hidden rounded-md border-2 transition-colors focus-visible:outline-2 focus-visible:outline-red-300 md:w-full ' +
+              className={'group relative grid aspect-[4/3] w-full cursor-pointer place-items-center overflow-hidden rounded-md border-2 transition-colors focus-visible:outline-2 focus-visible:outline-red-300 ' +
                 (index === position ? 'border-red-400 bg-[#421519]' : 'border-transparent bg-neutral-800 hover:border-red-300 hover:bg-neutral-700')}>
               {file.type.startsWith('image/') ? <img loading="lazy" decoding="async" alt="" src={previewUrl(file)}
                 onError={event => { if (event.currentTarget.src.endsWith('?preview=1')) event.currentTarget.src = '/api/stories/' + file.id + '/media'; }}
                 className="size-full object-cover transition-opacity group-hover:opacity-80"/> : file.type.startsWith('audio/') ? <Music2 aria-hidden="true" size={28}/> : <Film aria-hidden="true" size={28}/>}
               <span className="absolute bottom-1 left-1 rounded bg-black/80 px-2 py-1 text-xs">{mediaLabel(file)} {position + 1}</span>
             </button>)}
+              </div>
+            </section>)}
           </div>
         </> : <>
           <h2 className="text-2xl">Histórias da comunidade</h2>
@@ -144,11 +190,14 @@ export function StoryGallery({ onClose }: { onClose?: () => void } = {}) {
       {current && <div aria-label="Visualizador de fotos, vídeos e áudios" className="flex min-h-[55svh] min-w-0 flex-col bg-black md:min-h-0">
         {current ? <>
           <div className="flex shrink-0 flex-wrap items-center justify-between gap-3 border-b border-white/10 px-5 py-3">
-            <button className={action} aria-expanded={sidebarOpen} aria-controls="story-records" onClick={() => setSidebarOpen(open => !open)}>
+            <button className={action} aria-expanded={sidebarOpen} aria-controls="story-records" onClick={() => { setPopup(null); setSidebarOpen(open => !open); }}>
               {sidebarOpen ? <PanelLeftClose size={17}/> : <PanelLeftOpen size={17}/>}
               {sidebarOpen ? 'Ocultar miniaturas' : 'Mostrar miniaturas'}
             </button>
-            <span aria-live="polite" className="text-sm text-white/65">{mediaLabel(current)} {index + 1} de {items.length}</span>
+            <div aria-live="polite" className="min-w-0 text-sm text-white/65">
+              <p>{mediaLabel(current)} {index + 1} de {items.length}</p>
+              <p className="break-words text-white/90">{[current.author, current.recorded_on?.split('-').reverse().join('/')].filter(Boolean).join(' · ')}</p>
+            </div>
             <div className="flex gap-2">
               <button disabled={!index} className={action} onClick={() => { setIndex(index - 1); setFailed(''); }}><ChevronLeft size={17}/> Anterior</button>
               <button disabled={index + 1 === items.length} className={action} onClick={() => { setIndex(index + 1); setFailed(''); }}>Próximo <ChevronRight size={17}/></button>
@@ -170,5 +219,11 @@ export function StoryGallery({ onClose }: { onClose?: () => void } = {}) {
         </> : null}
       </div>}
     </div>
+    {popup && <div id="record-details-popup" role="tooltip"
+      style={{ left: popup.left, top: popup.top, width: 'min(240px, calc(100vw - 24px))' }}
+      className="pointer-events-none fixed z-50 space-y-2 rounded-lg border border-white/25 bg-neutral-950 p-4 text-sm text-white shadow-2xl">
+      {popup.file.author && <p className="break-words"><span className="block text-xs text-white/50">Autor</span>{popup.file.author}</p>}
+      {popup.file.recorded_on && <p><span className="block text-xs text-white/50">Data do registro</span><time dateTime={popup.file.recorded_on}>{popup.file.recorded_on.split('-').reverse().join('/')}</time></p>}
+    </div>}
   </section>;
 }

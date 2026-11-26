@@ -16,13 +16,27 @@ const selection = z.object({
     name: z.string().trim().min(1).max(255),
     type: z.enum(formats),
     size: z.number().int().positive().max(chunkSize * 10000),
+    author: z.string().trim().max(180).nullable().optional(),
+    recorded_on: z.iso.date().nullable().optional(),
   })).min(1),
 });
 type Item = { id: string; size: number; type: string; upload_id: string | null; status: string };
 const item = (env: Env, id: string) => env.DB.prepare('SELECT * FROM story_files WHERE id=?').bind(id).first<Item>();
 const key = (id: string) => 'stories/' + id;
-const fields = 'id, collection, title, name, type, size, status';
-const ordering = ' ORDER BY created DESC, collection, position';
+const fields = 'id, collection, title, name, type, size, status, author, recorded_on';
+const ordering = ' ORDER BY recorded_on IS NULL, recorded_on ASC, created ASC, collection, position, id';
+
+stories.patch('/admin/stories/:id', bodyLimit({ maxSize: 4096 }), async c => {
+  const parsed = z.object({
+    author: z.string().trim().max(180).nullable(),
+    recorded_on: z.iso.date().nullable(),
+  }).safeParse(await c.req.json().catch(() => null));
+  if (!parsed.success) return c.json({ error: 'Informe autor e data válidos ou deixe os campos vazios.' }, 400);
+  const saved = await c.env.DB.prepare("UPDATE story_files SET author=?, recorded_on=? WHERE id=? AND status!='deleting'")
+    .bind(parsed.data.author || null, parsed.data.recorded_on, c.req.param('id')).run();
+  if (!saved.meta.changes) return c.json({ error: 'Registro não encontrado.' }, 404);
+  return c.json({ saved: true });
+});
 
 stories.get('/stories', async c => {
   const { results } = await c.env.DB.prepare('SELECT ' + fields + " FROM story_files WHERE status='ready'" + ordering).all();
@@ -52,8 +66,8 @@ stories.post('/admin/stories', bodyLimit({ maxSize: 1024 * 1024 }), async c => {
   const total = files.reduce((sum, file) => sum + file.size, 0);
   // Uma única escrita reserva o lote inteiro, inclusive com administradores simultâneos.
   const inserted = await c.env.DB.prepare(`INSERT INTO story_files
-    (id, collection, title, name, type, size, created, position)
-    SELECT value->>'id', ?, ?, value->>'name', value->>'type', value->>'size', ?, key
+    (id, collection, title, name, type, size, created, position, author, recorded_on)
+    SELECT value->>'id', ?, ?, value->>'name', value->>'type', value->>'size', ?, key, NULLIF(value->>'author',''), value->>'recorded_on'
     FROM json_each(?) WHERE (SELECT COALESCE(SUM(size),0) FROM story_files) + ? <= (SELECT capacity FROM story_storage WHERE id=1)`)
     .bind(group, title, Date.now(), JSON.stringify(entries), total).run();
   if (!inserted.meta.changes) return c.json({ error: 'Espaço insuficiente para esta seleção.' }, 409);

@@ -1,4 +1,5 @@
 import { useEffect, useRef, useState } from 'react';
+import type { ReactNode } from 'react';
 import { Check, Film, Image as ImageIcon, Play, Music2 } from 'lucide-react';
 import type { StoryFile } from '../components/sections/StoryGallery';
 
@@ -20,7 +21,8 @@ export function useMediaUrl(file: MediaFile) {
   return file instanceof File ? url : '/api/stories/' + file.id + '/media';
 }
 
-export function MediaTile({ file, size, onOpen, onRemove, onOptimize, optimized, selected, onSelect }: {
+export function MediaTile({ file, size, onOpen, onRemove, onOptimize, optimized, selected, onSelect, children }: {
+  children?: ReactNode;
   file: MediaFile; size: string; onOpen: () => void; onRemove?: () => void; onOptimize?: () => void; optimized?: boolean; selected?: boolean; onSelect?: (checked: boolean) => void;
 }) {
   const url = useMediaUrl(file);
@@ -72,5 +74,6 @@ export function MediaTile({ file, size, onOpen, onRemove, onOptimize, optimized,
       {optimized && <p className="mb-2 inline-flex items-center gap-1 text-sm text-green-200"><Check size={14}/> Versão otimizada para envio</p>}
       <button type="button" onClick={onOptimize} className="w-full cursor-pointer rounded-md border border-white/20 px-2 py-2 text-sm text-rose-100 transition-colors hover:border-rose-300 hover:bg-white/5">{optimized ? 'Restaurar original' : 'Reduzir tamanho do vídeo'}</button>
     </div>}
+    {children}
   </li>;
 }
