@@ -32,7 +32,7 @@ export function SchoolMemoriesPage() {
         <h1 className="max-w-3xl text-4xl leading-tight sm:text-6xl">Memórias da Escola</h1>
         <p className="mt-7 max-w-3xl text-lg leading-relaxed text-white/75">O Colégio Estadual Indígena Ségsó Tanh Sa (frequentemente referido como Segso Tanh Sa) fica localizado na área rural de Palmas, Paraná, especificamente na região do Posto Indígena da FUNAI.</p>
         <nav aria-label="Nesta página" className="mt-8 flex flex-wrap gap-3 text-sm">
-          {[['dados-escola', 'Conheça o colégio'], ['curriculo-escola', 'Educação e cultura'], ['semanas-culturais', 'Álbuns das semanas culturais']].map(([id, label]) =>
+          {[['dados-escola', 'Conheça o colégio'], ['curriculo-escola', 'Educação e cultura'], ['semanas-culturais', 'Álbuns dos eventos da escola']].map(([id, label]) =>
             <a key={id} href={'#' + id} className="rounded border border-white/25 px-4 py-3 transition-colors hover:border-red-300 hover:bg-[#730000]">{label}</a>)}
         </nav>
       </div>

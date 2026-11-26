@@ -51,7 +51,8 @@ test('reserva concorrente, alteração da cota e publicação multipart no D1 e 
   const mixedIds = (await mixed.json() as { ids: string[] }).ids;
   for (const id of mixedIds) await env.DB.prepare("UPDATE story_files SET status='ready' WHERE id=?").bind(id).run();
   const combined = await (await request('/cultural-weeks')).json() as typeof albums;
-  assert.deepEqual(combined[0].photos.map(file => file.type).sort(), ['audio/mpeg', 'image/jpeg', 'video/mp4']);
+  assert.equal(combined.length, 2);
+  assert.deepEqual(combined.flatMap(album => album.photos.map(file => file.type)).sort(), ['audio/mpeg', 'image/jpeg', 'video/mp4']);
   assert.deepEqual(await (await request('/stories')).json(), []);
   for (const id of mixedIds) await request(admin + '/' + id, 'DELETE');
   await request(admin + '/' + cultureId, 'DELETE');

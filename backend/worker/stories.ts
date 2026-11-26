@@ -54,18 +54,18 @@ stories.get('/stories', async c => {
   return c.json(results);
 });
 stories.get('/cultural-weeks', async c => {
-  const { results } = await c.env.DB.prepare("SELECT id, name, type, author, recorded_on, cultural_year FROM story_files WHERE kind='culture' AND status='ready' ORDER BY cultural_year DESC, recorded_on IS NULL, recorded_on, created, position, id")
-    .all<{ id: string; name: string; type: string; author: string | null; recorded_on: string | null; cultural_year: number }>();
-  const albums = new Map<number, { year: number; photos: { src: string; thumbnail: string; caption: string; type: string }[] }>();
+  const { results } = await c.env.DB.prepare("SELECT id, collection, title, name, type, author, recorded_on, cultural_year FROM story_files WHERE kind='culture' AND status='ready' ORDER BY cultural_year DESC, recorded_on IS NULL, recorded_on, created, position, id")
+    .all<{ id: string; collection: string; title: string; name: string; type: string; author: string | null; recorded_on: string | null; cultural_year: number }>();
+  const albums = new Map<string, { id: string; title: string; year: number; photos: { src: string; thumbnail: string; caption: string; type: string }[] }>();
   for (const file of results) {
-    const album = albums.get(file.cultural_year) ?? { year: file.cultural_year, photos: [] };
+    const album = albums.get(file.collection) ?? { id: file.collection, title: file.title, year: file.cultural_year, photos: [] };
     album.photos.push({
       src: '/api/stories/' + file.id + '/media',
       thumbnail: '/api/stories/' + file.id + '/media?preview=1',
       type: file.type,
       caption: [file.author, file.recorded_on?.split('-').reverse().join('/')].filter(Boolean).join(' · '),
     });
-    albums.set(file.cultural_year, album);
+    albums.set(file.collection, album);
   }
   return c.json(Array.from(albums.values()));
 });
@@ -96,7 +96,7 @@ const createCollection: Handler<{ Bindings: Env }> = async c => {
   const kind = c.req.path.endsWith('/cultural-weeks') ? 'culture' : parsed.data.kind;
   const { year } = parsed.data;
   if (kind === 'culture' && !year)
-    return c.json({ error: 'Informe o ano da semana cultural.' }, 400);
+    return c.json({ error: 'Informe o ano do evento.' }, 400);
   const group = crypto.randomUUID();
   const entries = files.map(file => {
     const id = crypto.randomUUID();

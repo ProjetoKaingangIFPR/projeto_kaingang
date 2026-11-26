@@ -288,7 +288,7 @@ export default function StoryManager({ onClose, culturalWeeks = false }: { onClo
     <fieldset disabled={busy} className="grid min-w-0 gap-7 lg:grid-cols-[minmax(0,1fr)_17rem] lg:items-start">
       {storage ? <section className="order-last space-y-3 border-t border-stone-600 pt-5 lg:col-start-2 lg:row-start-1">
         <h2 className="text-xl">Armazenamento do acervo</h2>
-        <p className="text-sm text-white/60">Espaço compartilhado pelas histórias e semanas culturais.</p>
+        <p className="text-sm text-white/60">Espaço compartilhado pelas histórias e eventos da escola.</p>
         <p><strong>{bytes(available)} disponíveis</strong> de {bytes(storage.capacity)}</p>
         <progress aria-label="Espaço ocupado no acervo" className="block h-2 w-full accent-rose-400" value={occupied} max={storage.capacity} />
         <p>{bytes(occupied - reserved)} publicados · {bytes(reserved)} reservados</p>
@@ -311,12 +311,12 @@ export default function StoryManager({ onClose, culturalWeeks = false }: { onClo
       {editing ? <form className="min-w-0 space-y-5 rounded-xl bg-[#292523] p-5 sm:p-8 lg:col-start-1 lg:row-start-1" onSubmit={event => { event.preventDefault(); void perform(prepareVideos); }}>
         <button type="button" onClick={() => setEditing(false)} className="inline-flex items-center gap-2 text-sm text-stone-300 hover:text-white"><ArrowLeft size={16}/> Acervo</button>
         <h2 className="text-3xl">{culturalWeeks ? 'Novo álbum' : 'Nova história'}</h2>
-        {culturalWeeks && <label className="block">Ano da semana cultural
+        {culturalWeeks && <label className="block">Ano do evento
           <input type="number" required min={1900} max={2100} step={1} disabled={!!reservation} value={culturalYear} onChange={event => setCulturalYear(event.target.value)}
             className="mt-2 block w-full rounded-lg border border-white/25 bg-neutral-950 p-3"/>
         </label>}
         <label className="block">{culturalWeeks ? 'Título do álbum' : 'Título da história'} <input required disabled={!!reservation} maxLength={180} value={title} onChange={e => setTitle(e.target.value)}
-          placeholder={culturalWeeks ? 'Ex.: Semana cultural da escola' : 'Ex.: Memórias de Maria'} className="mt-2 block w-full rounded-lg border border-white/25 bg-neutral-950 p-3" /></label>
+          placeholder={culturalWeeks ? 'Ex.: Formatura, oficina ou semana cultural' : 'Ex.: Memórias de Maria'} className="mt-2 block w-full rounded-lg border border-white/25 bg-neutral-950 p-3" /></label>
         <label className="flex cursor-pointer flex-col items-center gap-2 rounded-lg border border-dashed border-stone-500 bg-[#211e1c] px-4 py-6 text-center transition-colors focus-within:ring-2 focus-within:ring-rose-300 hover:border-rose-300">
           <Upload size={24} className="text-rose-200"/>
           <span className="font-semibold">Escolher fotos, vídeos e áudios</span>
@@ -340,7 +340,7 @@ export default function StoryManager({ onClose, culturalWeeks = false }: { onClo
       </form> : <section className="min-w-0 lg:col-start-1 lg:row-start-1">
         {album ? <>
           <button className="mb-4 inline-flex items-center gap-2 text-sm text-stone-300 hover:text-white" onClick={() => { setAlbumId(''); setSelecting(false); setSelectedIds([]); }}><ArrowLeft size={16}/> Todas as histórias</button>
-          <h2 className="mb-5 break-words text-3xl">{album[0].title}</h2>{culturalWeeks && <p className="mb-4 text-white/60">Semana cultural {album[0].cultural_year}</p>}
+          <h2 className="mb-5 break-words text-3xl">{album[0].title}</h2>{culturalWeeks && <p className="mb-4 text-white/60">Ano {album[0].cultural_year}</p>}
           {renaming ? <form className="mb-5 space-y-3 rounded-lg border border-white/15 bg-neutral-900 p-4" onSubmit={event => {
             event.preventDefault();
             void perform(async () => {
@@ -396,7 +396,7 @@ export default function StoryManager({ onClose, culturalWeeks = false }: { onClo
           </ul>
         </> : <>
           <div className="mb-6 flex flex-wrap items-center justify-between gap-3">
-            <h2 className="text-3xl">{culturalWeeks ? 'Acervo das semanas culturais' : 'Acervo'}</h2>
+            <h2 className="text-3xl">{culturalWeeks ? 'Acervo de eventos da escola' : 'Acervo'}</h2>
             <button onClick={() => setEditing(true)} className="inline-flex cursor-pointer items-center gap-2 rounded-lg bg-[#a52a37] px-4 py-2.5 font-semibold text-white hover:bg-[#bd3543]"><Plus size={18}/>{files.length || title ? (culturalWeeks ? 'Continuar álbum' : 'Continuar história') : (culturalWeeks ? 'Novo álbum' : 'Nova história')}</button>
           </div>
           {storage && !collections.size && <div className="rounded-xl border border-dashed border-stone-600 px-5 py-12 text-center">

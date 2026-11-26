@@ -88,7 +88,7 @@ export default function AdminPage() {
             <button onClick={() => setSection("culture")} className="rounded-lg border border-white/15 bg-neutral-900 p-6 text-left cursor-pointer transition-colors hover:border-red-400/70 hover:bg-neutral-800 active:bg-neutral-700 focus-visible:outline-2 focus-visible:outline-offset-4">
               <Images aria-hidden="true" className="mb-4 text-red-300"/>
               <span className="font-display block text-2xl font-semibold">Memórias da Escola</span>
-              <span className="mt-2 block text-neutral-300">Gerenciar fotos, vídeos e áudios das semanas culturais por ano.</span>
+              <span className="mt-2 block text-neutral-300">Gerenciar fotos, vídeos e áudios dos eventos da escola por ano.</span>
             </button>
             <button onClick={() => setSection("visits")} className="rounded-lg border border-white/15 bg-neutral-900 p-6 text-left cursor-pointer transition-colors hover:border-red-400/70 hover:bg-neutral-800 active:bg-neutral-700 focus-visible:outline-2 focus-visible:outline-offset-4">
               <MapPinned aria-hidden="true" className="mb-4 text-red-300" />
