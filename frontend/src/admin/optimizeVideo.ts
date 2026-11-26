@@ -1,11 +1,11 @@
-import { AppendOnlyStreamTarget, BlobSource, Conversion, Input, QTFF, MP4, MATROSKA,
+import { AppendOnlyStreamTarget, BlobSource, Conversion, Input, ALL_FORMATS,
   Mp4OutputFormat, Output, QUALITY_HIGH } from 'mediabunny';
 
 class VideoOptimizationError extends Error {}
 
 export async function optimizeVideo(original: File, signal: AbortSignal, progress: (value: number) => void) {
   signal.throwIfAborted();
-  const input = new Input({ source: new BlobSource(original), formats: [MP4, QTFF, MATROSKA] });
+  const input = new Input({ source: new BlobSource(original), formats: ALL_FORMATS });
   const chunks: Blob[] = [];
   let outputSize = 0;
   const output = new Output({
@@ -21,7 +21,16 @@ export async function optimizeVideo(original: File, signal: AbortSignal, progres
   });
   try {
     const video = await input.getPrimaryVideoTrack();
-    if (!video || !await video.canDecode()) throw new VideoOptimizationError('Este navegador não consegue converter este vídeo.');
+    if (!video) {
+      const audio = await input.getPrimaryAudioTrack();
+      if (!audio) throw new VideoOptimizationError('O arquivo não contém uma faixa de áudio ou vídeo reconhecida.');
+      const type = (await input.getFormat()).mimeType.replace(/^video\//, 'audio/');
+      if (!['audio/mp4', 'audio/webm', 'audio/ogg', 'audio/mpeg', 'audio/wav', 'audio/aac', 'audio/flac'].includes(type))
+        throw new VideoOptimizationError('O formato de áudio deste arquivo ainda não é aceito.');
+      signal.throwIfAborted();
+      return new File([original], original.name, { type, lastModified: original.lastModified });
+    }
+    if (!await video.canDecode()) throw new VideoOptimizationError('Este navegador não consegue converter este vídeo.');
     if (await video.hasHighDynamicRange()) throw new VideoOptimizationError('Para preservar as cores HDR, use o vídeo original.');
     signal.throwIfAborted();
     const conversion = await Conversion.init({
