@@ -92,7 +92,7 @@ export default function AdminPage() {
             <button onClick={() => setSection("stories")} className="rounded-lg border border-white/15 bg-neutral-900 p-6 text-left cursor-pointer transition-colors hover:border-red-400/70 hover:bg-neutral-800 active:bg-neutral-700 focus-visible:outline-2 focus-visible:outline-offset-4">
               <BookOpen aria-hidden="true" className="mb-4 text-red-300" />
               <span className="font-display block text-2xl font-semibold">Histórias contadas</span>
-              <span className="mt-2 block text-neutral-300">Publicar fotos e vídeos e gerenciar o armazenamento.</span>
+              <span className="mt-2 block text-neutral-300">Publicar fotos, vídeos e áudios e gerenciar o armazenamento.</span>
             </button>
           </div>
           {changingPassword && <ChangePasswordModal onClose={() => setChangingPassword(false)}

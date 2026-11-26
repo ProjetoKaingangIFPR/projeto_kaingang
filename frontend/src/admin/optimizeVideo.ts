@@ -1,11 +1,11 @@
-import { AppendOnlyStreamTarget, BlobSource, Conversion, Input, QTFF, MP4, WEBM,
+import { AppendOnlyStreamTarget, BlobSource, Conversion, Input, QTFF, MP4, MATROSKA,
   Mp4OutputFormat, Output, QUALITY_HIGH } from 'mediabunny';
 
 class VideoOptimizationError extends Error {}
 
 export async function optimizeVideo(original: File, signal: AbortSignal, progress: (value: number) => void) {
   signal.throwIfAborted();
-  const input = new Input({ source: new BlobSource(original), formats: [MP4, QTFF, WEBM] });
+  const input = new Input({ source: new BlobSource(original), formats: [MP4, QTFF, MATROSKA] });
   const chunks: Blob[] = [];
   let outputSize = 0;
   const output = new Output({

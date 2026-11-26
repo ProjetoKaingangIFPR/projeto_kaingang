@@ -35,6 +35,7 @@ function PreviewContent({ file }: { file: MediaFile }) {
   const [failed, setFailed] = useState(false);
   return <div className="grid min-h-40 place-items-center bg-black">
       {url && (failed ? <p role="alert" className="p-6">Este navegador não conseguiu abrir o arquivo. <a href={url} download={file.name} className="underline">Baixar para abrir no dispositivo</a></p>
+        : file.type.startsWith('audio/') ? <audio controls preload="metadata" aria-label={file.name} src={url} onError={() => setFailed(true)} className="m-6 max-w-full"/>
         : file.type.startsWith('video/') ? <video controls playsInline preload="metadata" aria-label={file.name} src={url} onError={() => setFailed(true)} className="max-h-[72svh] w-full" />
         : <img src={url} alt={file.name} onError={() => setFailed(true)} className="max-h-[72svh] max-w-full object-contain" />)}
     </div>;

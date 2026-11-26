@@ -5,11 +5,11 @@ import { api, ApiError } from './api';
 import { galleryImageUrl, MediaTile, type MediaFile } from './MediaTile';
 import MediaPreview from './MediaPreview';
 import { uploadParts, type UploadedPart } from './uploadParts';
+import { mediaFormats as formats, mediaAccept, normalizeMedia } from './mediaFormats';
 
 type Storage = { files: StoryFile[]; capacity: number };
 type Reservation = { ids: string[]; chunkSize: number };
 const endpoint = '/api/admin/stories';
-const formats = ['image/jpeg', 'image/png', 'image/webp', 'image/gif', 'image/avif', 'video/mp4', 'video/webm', 'video/quicktime'];
 function bytes(value: number) {
   const unit = value >= 1e9 ? 'GB' : value >= 1e6 ? 'MB' : value >= 1e3 ? 'kB' : 'B';
   const divisor = { GB: 1e9, MB: 1e6, kB: 1e3, B: 1 }[unit];
@@ -291,10 +291,10 @@ export default function StoryManager({ onClose }: { onClose: () => void }) {
           placeholder="Ex.: Memórias de Maria" className="mt-2 block w-full rounded-lg border border-white/25 bg-neutral-950 p-3" /></label>
         <label className="flex cursor-pointer flex-col items-center gap-2 rounded-lg border border-dashed border-stone-500 bg-[#211e1c] px-4 py-6 text-center transition-colors focus-within:ring-2 focus-within:ring-rose-300 hover:border-rose-300">
           <Upload size={24} className="text-rose-200"/>
-          <span className="font-semibold">Escolher fotos e vídeos</span>
+          <span className="font-semibold">Escolher fotos, vídeos e áudios</span>
           <span className="text-sm text-stone-300">Você pode escolher vários arquivos de uma vez.</span>
-          <input type="file" multiple disabled={!!reservation} accept={formats.join(',')} className="sr-only"
-            onChange={e => { const added = Array.from(e.target.files || []); setFiles(current => [...current, ...added]); e.target.value = ''; }} />
+          <input type="file" multiple disabled={!!reservation} accept={mediaAccept} className="sr-only"
+            onChange={e => { const added = Array.from(e.target.files || []).map(normalizeMedia); setFiles(current => [...current, ...added]); e.target.value = ''; }} />
         </label>
         {!!files.length && <ul aria-label="Arquivos selecionados" className="grid max-h-[52svh] grid-cols-2 gap-4 overflow-y-auto p-1 sm:grid-cols-3">
           {files.map((file, index) => <MediaTile key={file.name + file.lastModified + index} file={file} size={bytes(file.size)}
@@ -303,7 +303,7 @@ export default function StoryManager({ onClose }: { onClose: () => void }) {
         {!!files.length && !uploadTotal && <p className="rounded-lg bg-neutral-800 p-3">{files.length} {files.length === 1 ? 'arquivo selecionado' : 'arquivos selecionados'} · {bytes(selected)}{storage && !exceeds && ' · Após o envio, ' + bytes(reservation ? available : available - selected) + ' disponíveis.'}</p>}
         {!!toPrepare.length && <p className="text-sm text-stone-300">Ao enviar, os vídeos serão otimizados automaticamente neste dispositivo. Mantenha esta aba aberta até concluir.</p>}
         {storage && exceeds && !uploadTotal && <p role="alert" className="text-amber-300">A seleção excede o saldo em {bytes(selected - available)}. Retire arquivos ou ajuste a cota.</p>}
-        {invalid && <p role="alert">Retire arquivos vazios ou incompatíveis. Formatos aceitos incluem JPEG, PNG, WebP, GIF, AVIF, MP4, WebM e MOV.</p>}
+        {invalid && <p role="alert">Retire arquivos vazios ou incompatíveis. Aceitamos imagens JPEG, PNG, WebP, GIF, AVIF, BMP, TIFF, HEIC e HEIF; vídeos MP4, M4V, MOV, WebM e MKV; áudios MP3, M4A, WAV, OGG, Opus, AAC, FLAC e WebM.</p>}
         <button disabled={!storage || !files.length || !title.trim() || invalid || (exceeds && !toPrepare.length)}
           className="rounded bg-[#8B0000] px-5 py-2 font-semibold transition-colors enabled:cursor-pointer enabled:hover:bg-[#a30000] disabled:opacity-50">{reservation ? 'Continuar envio' : 'Enviar'}</button>
       </form> : <section className="min-w-0 lg:col-start-1 lg:row-start-1">
@@ -342,7 +342,7 @@ export default function StoryManager({ onClose }: { onClose: () => void }) {
           </div>
           {storage && !collections.size && <div className="rounded-xl border border-dashed border-stone-600 px-5 py-12 text-center">
             <BookOpen aria-hidden="true" className="mx-auto mb-4 text-rose-300" size={32}/>
-            <h3 className="text-2xl">Sua primeira história</h3><p className="mt-2 text-stone-300">Escolha “Nova história” para reunir as fotos e os vídeos.</p>
+            <h3 className="text-2xl">Sua primeira história</h3><p className="mt-2 text-stone-300">Escolha “Nova história” para reunir fotos, vídeos e áudios.</p>
           </div>}
           <div className="grid gap-5 sm:grid-cols-2">
             {Array.from(collections, ([id, group]) => {

@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState } from 'react';
-import { Check, Film, Image as ImageIcon, Play } from 'lucide-react';
+import { Check, Film, Image as ImageIcon, Play, Music2 } from 'lucide-react';
 import type { StoryFile } from '../components/sections/StoryGallery';
 
 export type MediaFile = File | StoryFile;
@@ -48,7 +48,7 @@ export function MediaTile({ file, size, onOpen, onRemove, onOptimize, optimized,
     <button type="button" disabled={!ready && !onSelect} aria-label={(onSelect ? 'Selecionar ' : 'Visualizar ') + file.name}
       aria-pressed={onSelect ? Boolean(selected) : undefined} onClick={() => onSelect ? onSelect(!selected) : onOpen()}
       className="group/tile relative grid aspect-[4/3] w-full place-items-center overflow-hidden rounded-md bg-[#342d2c] outline-offset-2 enabled:cursor-pointer enabled:hover:ring-2 enabled:hover:ring-rose-300">
-      {visible && ready && url && !failed
+      {file.type.startsWith('audio/') ? <Music2 size={32} aria-hidden="true"/> : visible && ready && url && !failed
         ? video
           ? <video muted playsInline preload="metadata" src={url + '#t=0.1'} onError={() => setFailed(true)} className="absolute inset-0 size-full object-cover" />
           : <img decoding="async" alt="" src={file instanceof File ? url : galleryImageUrl(file)} onError={event => {

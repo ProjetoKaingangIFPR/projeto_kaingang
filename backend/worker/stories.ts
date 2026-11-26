@@ -6,7 +6,10 @@ import { jpegPreview } from './jpeg-preview';
 
 export const stories = new Hono<{ Bindings: Env }>();
 const chunkSize = 8 * 1024 * 1024;
-const formats = ['image/jpeg', 'image/png', 'image/webp', 'image/gif', 'image/avif', 'video/mp4', 'video/webm', 'video/quicktime'] as const;
+const formats = ['image/jpeg', 'image/png', 'image/webp', 'image/gif', 'image/avif',
+  'image/bmp', 'image/tiff', 'image/heic', 'image/heif',
+  'video/mp4', 'video/webm', 'video/quicktime', 'video/x-matroska',
+  'audio/mpeg', 'audio/mp4', 'audio/wav', 'audio/ogg', 'audio/aac', 'audio/flac', 'audio/webm'] as const;
 const selection = z.object({
   title: z.string().trim().min(1).max(180),
   files: z.array(z.object({
