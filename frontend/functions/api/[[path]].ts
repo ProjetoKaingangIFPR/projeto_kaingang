@@ -17,5 +17,44 @@ export const onRequest: PagesFunction<Env> = async ({ request, env }) => {
   }
   upstream.pathname = incoming.pathname;
   upstream.search = incoming.search;
-  return fetch(new Request(upstream, request), { redirect: 'manual' });
+  const headers = new Headers(request.headers);
+  // The runtime must generate these headers for the upstream host and body.
+  headers.delete('Host');
+  headers.delete('Connection');
+  headers.delete('Transfer-Encoding');
+  headers.delete('Content-Length');
+  const uploadPart = request.method === 'PUT' && /^\/api\/admin\/stories\/[^/]+\/parts\/\d+$/.test(incoming.pathname);
+  let body: BodyInit | null = request.body;
+  if (uploadPart && request.body) {
+    const reader = request.body.getReader();
+    const chunks: Uint8Array[] = [];
+    let length = 0;
+    while (true) {
+      const result = await reader.read();
+      if (result.done) break;
+      length += result.value.byteLength;
+      if (length > 8 * 1024 * 1024) {
+        await reader.cancel();
+        return Response.json({ error: 'A parte enviada ultrapassa 8 MB.' }, { status: 413 });
+      }
+      chunks.push(result.value);
+    }
+    const bytes = new Uint8Array(length);
+    let offset = 0;
+    for (const chunk of chunks) {
+      bytes.set(chunk, offset);
+      offset += chunk.byteLength;
+    }
+    body = bytes;
+  }
+  const outgoing = uploadPart
+    ? new Request(upstream, { method: request.method, headers, body, redirect: 'manual' })
+    : new Request(new Request(upstream, request), { headers, redirect: 'manual' });
+  const response = await fetch(outgoing, { redirect: 'manual' });
+  if (uploadPart && !response.ok && !response.headers.get('Content-Type')?.includes('application/json')) {
+    console.error('Story part rejected by upstream', response.status, response.headers.get('CF-Ray'));
+    return Response.json({ error: `O servidor recusou a parte do arquivo (HTTP ${response.status}). Tente continuar o envio. Se persistir, consulte os logs do Worker e do Pages.` },
+      { status: response.status, headers: { 'Cache-Control': 'no-store', 'X-Upload-Error-Source': 'upstream' } });
+  }
+  return response;
 };

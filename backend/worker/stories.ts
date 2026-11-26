@@ -26,6 +26,15 @@ const key = (id: string) => 'stories/' + id;
 const fields = 'id, collection, title, name, type, size, status, author, recorded_on';
 const ordering = ' ORDER BY recorded_on IS NULL, recorded_on ASC, created ASC, collection, position, id';
 
+stories.patch('/admin/story-collections/:id', bodyLimit({ maxSize: 4096 }), async c => {
+  const parsed = z.object({ title: z.string().trim().min(1).max(180) }).safeParse(await c.req.json().catch(() => null));
+  if (!parsed.success) return c.json({ error: 'Informe um título entre 1 e 180 caracteres.' }, 400);
+  const saved = await c.env.DB.prepare("UPDATE story_files SET title=? WHERE collection=?")
+    .bind(parsed.data.title, c.req.param('id')).run();
+  if (!saved.meta.changes) return c.json({ error: 'História não encontrada.' }, 404);
+  return c.json({ saved: true });
+});
+
 stories.patch('/admin/stories/:id', bodyLimit({ maxSize: 4096 }), async c => {
   const parsed = z.object({
     author: z.string().trim().max(180).nullable(),

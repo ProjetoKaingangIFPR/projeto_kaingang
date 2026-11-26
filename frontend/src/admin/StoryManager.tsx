@@ -20,6 +20,8 @@ function bytes(value: number) {
 export default function StoryManager({ onClose }: { onClose: () => void }) {
   const [preview, setPreview] = useState<{ files: MediaFile[]; index: number } | null>(null);
   const [albumId, setAlbumId] = useState('');
+  const [renaming, setRenaming] = useState(false);
+  const [newTitle, setNewTitle] = useState('');
   const [selectedIds, setSelectedIds] = useState<string[]>([]);
   const [selecting, setSelecting] = useState(false);
   const [deletion, setDeletion] = useState<{ total: number; done: number; failed: number; name: string } | null>(null);
@@ -195,27 +197,34 @@ export default function StoryManager({ onClose }: { onClose: () => void }) {
     await api(endpoint + '/' + file.id, { method: 'DELETE' });
     if (reservation?.ids.includes(file.id)) {
       const index = reservation.ids.indexOf(file.id);
-      const ids = reservation.ids.filter(id => id !== file.id);
-      setReservation(ids.length ? { ...reservation, ids } : null);
-      setFiles(current => current.filter((_, i) => i !== index));
+      const removedFile = files[index];
+      setReservation(current => {
+        if (!current) return null;
+        const ids = current.ids.filter(id => id !== file.id);
+        return ids.length ? { ...current, ids } : null;
+      });
+      setFiles(current => current.filter(item => item !== removedFile));
     }
     if (!silent) setMessage('Arquivo removido.');
   }
 
-  async function removeSelected() {
-    const selectedFiles = album?.filter(file => selectedIds.includes(file.id)) ?? [];
-    if (!selectedFiles.length || !window.confirm(`Excluir permanentemente ${selectedFiles.length} arquivos desta história e liberar ${bytes(selectedFiles.reduce((sum, file) => sum + file.size, 0))}?`)) return;
+  async function removeSelected(entireStory = false) {
+    const selectedFiles = album?.filter(file => entireStory || selectedIds.includes(file.id)) ?? [];
+    const subject = entireStory ? `a história “${album?.[0].title}” e seus ${selectedFiles.length} arquivos` : `${selectedFiles.length} arquivos desta história`;
+    if (!selectedFiles.length || !window.confirm(`Excluir permanentemente ${subject} e liberar ${bytes(selectedFiles.reduce((sum, file) => sum + file.size, 0))}?`)) return;
     setBusy(true);
     setError('');
     setMessage('');
     let done = 0;
     let failed = 0;
+    const removedIds = new Set<string>();
     setDeletion({ total: selectedFiles.length, done, failed, name: '' });
     try {
       for (const file of selectedFiles) {
         setDeletion({ total: selectedFiles.length, done, failed, name: file.name });
         try {
           await remove(file, true);
+          removedIds.add(file.id);
           setSelectedIds(current => current.filter(id => id !== file.id));
         } catch {
           failed++;
@@ -223,9 +232,16 @@ export default function StoryManager({ onClose }: { onClose: () => void }) {
         done++;
         setDeletion({ total: selectedFiles.length, done, failed, name: file.name });
       }
-      setMessage(`${done - failed} de ${selectedFiles.length} arquivos removidos.`);
-      if (failed) setError(`${failed} arquivos não foram removidos. Eles continuam selecionados para você tentar novamente.`);
-      else setSelecting(false);
+      setMessage(entireStory && !failed ? 'História excluída.' : `${done - failed} de ${selectedFiles.length} arquivos removidos.`);
+      if (failed) {
+        setSelectedIds(selectedFiles.filter(file => !removedIds.has(file.id)).map(file => file.id));
+        setSelecting(true);
+        setError(`${failed} arquivos não foram removidos. Eles continuam selecionados para você tentar novamente.`);
+      } else {
+        setSelecting(false);
+        setSelectedIds([]);
+        if (entireStory) setAlbumId('');
+      }
       await refresh();
     } catch (err) {
       report(err);
@@ -318,6 +334,28 @@ export default function StoryManager({ onClose }: { onClose: () => void }) {
         {album ? <>
           <button className="mb-4 inline-flex items-center gap-2 text-sm text-stone-300 hover:text-white" onClick={() => { setAlbumId(''); setSelecting(false); setSelectedIds([]); }}><ArrowLeft size={16}/> Todas as histórias</button>
           <h2 className="mb-5 break-words text-3xl">{album[0].title}</h2>
+          {renaming ? <form className="mb-5 space-y-3 rounded-lg border border-white/15 bg-neutral-900 p-4" onSubmit={event => {
+            event.preventDefault();
+            void perform(async () => {
+              await api('/api/admin/story-collections/' + albumId, { method: 'PATCH', body: JSON.stringify({ title: newTitle.trim() }) });
+              setRenaming(false);
+              setMessage('Título atualizado.');
+            });
+          }}>
+            <label className="block text-sm">Título da história
+              <input autoFocus required maxLength={180} value={newTitle} onChange={event => setNewTitle(event.target.value)}
+                className="mt-2 block w-full rounded border border-white/25 bg-neutral-950 p-3"/>
+            </label>
+            <div className="flex gap-3">
+              <button disabled={!newTitle.trim()} className="rounded bg-[#8B0000] px-4 py-2 hover:bg-[#a30000] disabled:opacity-40">Salvar título</button>
+              <button type="button" onClick={() => setRenaming(false)} className="rounded border border-white/25 px-4 py-2 hover:bg-white/10">Cancelar</button>
+            </div>
+          </form> : <div className="mb-5 flex flex-wrap gap-3">
+            <button type="button" onClick={() => { setNewTitle(album[0].title); setRenaming(true); }}
+              className="cursor-pointer rounded border border-white/25 px-4 py-2 text-sm hover:bg-white/10">Editar título</button>
+            <button type="button" onClick={() => void removeSelected(true)}
+              className="inline-flex cursor-pointer items-center gap-2 rounded border border-red-300/50 px-4 py-2 text-sm text-red-200 hover:bg-red-950"><Trash2 size={16}/> Excluir história</button>
+          </div>}
           <div className="sticky top-0 z-10 mb-5 rounded-xl border border-white/15 bg-neutral-900 p-4 shadow-lg">
             {deletion ? <div role="status" aria-live="polite" className="space-y-2">
               <div className="flex items-center justify-between gap-3"><strong>Excluindo arquivos</strong><span>{deletion.done} de {deletion.total}</span></div>
@@ -331,7 +369,7 @@ export default function StoryManager({ onClose }: { onClose: () => void }) {
               </div>
               <div className="mt-3 flex flex-wrap items-center justify-between gap-3">
                 <button type="button" className="cursor-pointer text-sm underline hover:text-rose-200" onClick={() => setSelectedIds(selectedIds.length === album.length ? [] : album.map(file => file.id))}>{selectedIds.length === album.length ? 'Desmarcar todos' : 'Selecionar todos'}</button>
-                <button type="button" disabled={!selectedIds.length} onClick={removeSelected} className="inline-flex items-center gap-2 rounded-lg bg-[#a52a37] px-4 py-2.5 text-sm font-semibold enabled:cursor-pointer enabled:hover:bg-[#bd3543] disabled:opacity-40"><Trash2 size={16}/> Excluir selecionados</button>
+                <button type="button" disabled={!selectedIds.length} onClick={() => void removeSelected()} className="inline-flex items-center gap-2 rounded-lg bg-[#a52a37] px-4 py-2.5 text-sm font-semibold enabled:cursor-pointer enabled:hover:bg-[#bd3543] disabled:opacity-40"><Trash2 size={16}/> Excluir selecionados</button>
               </div>
             </> : <button type="button" className="cursor-pointer rounded-lg border border-white/25 px-4 py-2 text-sm hover:bg-white/10" onClick={() => setSelecting(true)}>Selecionar arquivos</button>}
           </div>
@@ -361,7 +399,7 @@ export default function StoryManager({ onClose }: { onClose: () => void }) {
           <div className="grid gap-5 sm:grid-cols-2">
             {Array.from(collections, ([id, group]) => {
               const cover = group.find(file => file.status === 'ready' && file.type.startsWith('image/'));
-              return <button key={id} onClick={() => { setAlbumId(id); setSelectedIds([]); setSelecting(false); }} className="group min-w-0 cursor-pointer overflow-hidden rounded-lg border border-white/15 bg-[#262321] text-left transition-colors hover:border-rose-300">
+              return <button key={id} onClick={() => { setAlbumId(id); setSelectedIds([]); setSelecting(false); setRenaming(false); }} className="group min-w-0 cursor-pointer overflow-hidden rounded-lg border border-white/15 bg-[#262321] text-left transition-colors hover:border-rose-300">
                 <span className="grid aspect-[16/10] place-items-center overflow-hidden bg-[#48242a]">
                   {cover ? <img loading="lazy" decoding="async" alt="" src={galleryImageUrl(cover)} onError={event => {
                     if (event.currentTarget.src.endsWith('?preview=1')) event.currentTarget.src = '/api/stories/' + cover.id + '/media';

@@ -46,6 +46,9 @@ test('reserva concorrente, alteração da cota e publicação multipart no D1 e 
   const media = { title: 'Memória', files: [{ name: 'fala.mp4', type: 'video/mp4', size: partSize + 2 }] };
   const created = await request(admin, 'POST', media);
   const { ids: [id] } = await created.json() as { ids: string[] };
+  const collection = await env.DB.prepare('SELECT collection FROM story_files WHERE id=?').bind(id).first<string>('collection');
+  assert.equal((await request('/admin/story-collections/' + collection, 'PATCH', { title: ' ' })).status, 400);
+  assert.equal((await request('/admin/story-collections/' + collection, 'PATCH', { title: ' Novo título ' })).status, 200);
   const path = admin + '/' + id;
   assert.equal((await request(path, 'PATCH', { author: 'Maria', recorded_on: '2020-02-30' })).status, 400);
   assert.equal((await request(path, 'PATCH', { author: ' Maria ', recorded_on: '2020-03-15' })).status, 200);
@@ -65,6 +68,7 @@ test('reserva concorrente, alteração da cota e publicação multipart no D1 e 
   const published = await (await request('/stories')).json() as { author: string; recorded_on: string }[];
   assert.equal(published[0].author, 'Maria');
   assert.equal(published[0].recorded_on, '2020-03-15');
+  assert.equal((published[0] as unknown as { title: string }).title, 'Novo título');
   const stream = await stories.request('/stories/' + id + '/media', { headers: { Range: 'bytes=-2' } }, env);
   assert.equal(stream.status, 206);
   assert.deepEqual(new Uint8Array(await stream.arrayBuffer()), new Uint8Array([42, 43]));
