@@ -106,7 +106,7 @@ export default function App() {
       <div className="min-h-screen bg-neutral-950 font-sans flex flex-col">
         <Navbar activeSection={isStoriesPage ? "historias" : "sobre"} onSelectNav={navigateFromAbout} />
         <main className="flex-1">{isStoriesPage ? <StoriesSection /> : <AboutSection />}</main>
-        <Footer onSelectNav={navigateFromAbout} />
+        {!isStoriesPage && <Footer onSelectNav={navigateFromAbout} />}
       </div>
     );
   }

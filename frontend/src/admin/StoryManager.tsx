@@ -1,7 +1,10 @@
-import { useEffect, useState } from 'react';
-import { ArrowLeft } from 'lucide-react';
+import { useEffect, useRef, useState } from 'react';
+import { ArrowLeft, BookOpen, Plus, Trash2, Upload } from 'lucide-react';
 import type { StoryFile } from '../components/sections/StoryGallery';
 import { api, ApiError } from './api';
+import { galleryImageUrl, MediaTile, type MediaFile } from './MediaTile';
+import MediaPreview from './MediaPreview';
+import { uploadParts, type UploadedPart } from './uploadParts';
 
 type Storage = { files: StoryFile[]; capacity: number };
 type Reservation = { ids: string[]; chunkSize: number };
@@ -14,8 +17,17 @@ function bytes(value: number) {
 }
 
 export default function StoryManager({ onClose }: { onClose: () => void }) {
+  const [preview, setPreview] = useState<{ files: MediaFile[]; index: number } | null>(null);
+  const [albumId, setAlbumId] = useState('');
+  const [selectedIds, setSelectedIds] = useState<string[]>([]);
+  const [selecting, setSelecting] = useState(false);
+  const [deletion, setDeletion] = useState<{ total: number; done: number; failed: number; name: string } | null>(null);
   const [storage, setStorage] = useState<Storage | null>(null);
   const [files, setFiles] = useState<File[]>([]);
+  const originals = useRef(new WeakMap<File, File>());
+  const [preparing, setPreparing] = useState<{ name: string; index: number; total: number; percent: number } | null>(null);
+  const preparationController = useRef<AbortController | null>(null);
+  const [editing, setEditing] = useState(false);
   const [reservation, setReservation] = useState<Reservation | null>(null);
   const [title, setTitle] = useState('');
   const [limit, setLimit] = useState('');
@@ -24,6 +36,15 @@ export default function StoryManager({ onClose }: { onClose: () => void }) {
   const [error, setError] = useState('');
   const [sent, setSent] = useState(0);
   const [uploadTotal, setUploadTotal] = useState(0);
+  const cancelRequested = useRef(false);
+  const activeTransfer = useRef<AbortController | null>(null);
+  const receipts = useRef<{ id: string; parts: Map<number, UploadedPart> } | null>(null);
+  const [cancelling, setCancelling] = useState(false);
+  const [currentFile, setCurrentFile] = useState('');
+  const progressPanel = useRef<HTMLElement>(null);
+  useEffect(() => {
+    if (uploadTotal) progressPanel.current?.scrollIntoView({ block: 'start' });
+  }, [uploadTotal]);
   const refresh = async () => {
     try {
       setStorage(await api<Storage>(endpoint));
@@ -46,58 +67,126 @@ export default function StoryManager({ onClose }: { onClose: () => void }) {
     try { await refresh(); } catch (err) { report(err); }
     setBusy(false);
     setUploadTotal(0);
+    setCancelling(false);
+    setCurrentFile('');
   }
 
   const selected = files.reduce((sum, file) => sum + file.size, 0);
+  const collections = new Map<string, StoryFile[]>();
+  for (const file of storage?.files ?? []) {
+    const group = collections.get(file.collection);
+    if (group) group.push(file);
+    else collections.set(file.collection, [file]);
+  }
+  const album = collections.get(albumId);
   const occupied = storage?.files.reduce((sum, file) => sum + file.size, 0) ?? 0;
   const reserved = storage?.files.filter(file => file.status !== 'ready').reduce((sum, file) => sum + file.size, 0) ?? 0;
   const available = (storage?.capacity ?? 0) - occupied;
   const exceeds = !reservation && selected > available;
   const invalid = files.some(file => !file.size || !formats.includes(file.type));
+  const toPrepare = reservation ? [] : files.filter(file => file.type.startsWith('video/') && !originals.current.has(file));
 
-  async function upload() {
+  async function prepareVideos() {
+    const controller = new AbortController();
+    preparationController.current = controller;
+    const prepared = [...files];
+    try {
+      if (toPrepare.length) {
+        const { optimizeVideo } = await import('./optimizeVideo');
+        for (const [index, file] of toPrepare.entries()) {
+          controller.signal.throwIfAborted();
+          setPreparing({ name: file.name, index: index + 1, total: toPrepare.length, percent: 0 });
+          try {
+            const candidate = await optimizeVideo(file, controller.signal, percent =>
+              setPreparing({ name: file.name, index: index + 1, total: toPrepare.length, percent }));
+            originals.current.set(candidate, file);
+            prepared[prepared.indexOf(file)] = candidate;
+            setFiles(current => current.map(item => item === file ? candidate : item));
+          } catch (err) {
+            if (controller.signal.aborted) throw err;
+            throw new Error(file.name + ': ' + (err instanceof Error ? err.message : 'Falha ao otimizar.') +
+              ' Retire este arquivo ou tente novamente para continuar o envio.');
+          }
+        }
+      }
+      controller.signal.throwIfAborted();
+      if (prepared.reduce((sum, file) => sum + file.size, 0) > available && !reservation) {
+        throw new Error('A seleção otimizada ultrapassa o espaço disponível. Retire arquivos ou ajuste a cota.');
+      }
+      setPreparing(null);
+      await upload(prepared);
+    } catch (err) {
+      if (!controller.signal.aborted) throw err;
+      setMessage('Envio cancelado durante a otimização. As cópias já preparadas continuam na seleção.');
+    } finally {
+      setPreparing(null);
+      preparationController.current = null;
+    }
+  }
+
+  async function upload(uploadFiles: File[]) {
+    cancelRequested.current = false;
+    const transfer = new AbortController();
+    activeTransfer.current = transfer;
+    setUploadTotal(uploadFiles.reduce((sum, file) => sum + file.size, 0));
+    setSent(0);
     const batch = reservation ?? await api<Reservation>(endpoint, {
-      method: 'POST', body: JSON.stringify({ title: title.trim(), files: files.map(({ name, size, type }) => ({ name, size, type })) }),
+      method: 'POST', body: JSON.stringify({ title: title.trim(), files: uploadFiles.map(({ name, size, type }) => ({ name, size, type })) }),
     });
     setReservation(batch);
     const { ids, chunkSize } = batch;
-    setUploadTotal(selected);
-    setSent(0);
-    await refresh();
     let done = 0;
-    for (const [i, file] of files.entries()) {
+    let completed = 0;
+    try {
+    for (const [i, file] of uploadFiles.entries()) {
+      if (cancelRequested.current) break;
+      setCurrentFile(file.name);
       const path = endpoint + '/' + ids[i];
       const { published } = await api<{ published?: boolean }>(path + '/start', { method: 'POST' });
       if (!published) {
-        const parts: { partNumber: number; etag: string }[] = [];
-        for (let offset = 0; offset < file.size; offset += chunkSize) {
-          const part = file.slice(offset, offset + chunkSize);
-          const put = () => api<{ partNumber: number; etag: string }>(path + '/parts/' + (parts.length + 1), {
-            method: 'PUT', headers: { 'Content-Type': 'application/octet-stream' }, body: part,
-          });
-          try { parts.push(await put()); }
-          catch (err) {
-            if (err instanceof ApiError && err.status < 500 && err.status !== 429) throw err;
-            await new Promise(resolve => setTimeout(resolve, 1200));
-            parts.push(await put());
-          }
-          done += part.size;
+        if (receipts.current?.id !== ids[i]) receipts.current = { id: ids[i], parts: new Map() };
+        const parts = await uploadParts(file, path, chunkSize, receipts.current.parts, transfer.signal, size => {
+          done += size;
           setSent(done);
-        }
+        });
+        if (cancelRequested.current) break;
         await api(path + '/finish', { method: 'POST', body: JSON.stringify(parts) });
       } else {
         done += file.size;
         setSent(done);
       }
       setFiles(current => current.slice(1));
+      receipts.current = null;
+      completed++;
       setReservation({ ids: ids.slice(i + 1), chunkSize });
+    }
+    } catch (err) {
+      if (!cancelRequested.current) throw err;
+    }
+    if (cancelRequested.current && completed < ids.length) {
+      const remainingIds: string[] = [];
+      const remainingFiles: File[] = [];
+      for (let i = completed; i < ids.length; i++) {
+        try {
+          await api(endpoint + '/' + ids[i] + '?pendingOnly=1', { method: 'DELETE' });
+        } catch {
+          remainingIds.push(ids[i]);
+          remainingFiles.push(uploadFiles[i]);
+        }
+      }
+      setReservation(remainingIds.length ? { ids: remainingIds, chunkSize } : null);
+      setFiles(remainingIds.length ? remainingFiles : uploadFiles.slice(completed));
+      if (remainingIds.length) throw new Error('Alguns arquivos pendentes ainda ocupam espaço. Você pode removê-los em Arquivos do acervo.');
+      setMessage('Envio cancelado. O espaço reservado foi liberado. Arquivos já publicados continuam no acervo.');
+      return;
     }
     setReservation(null);
     setTitle('');
     setMessage('História publicada.');
+    setEditing(false);
   }
 
-  async function remove(file: StoryFile) {
+  async function remove(file: StoryFile, silent = false) {
     await api(endpoint + '/' + file.id, { method: 'DELETE' });
     if (reservation?.ids.includes(file.id)) {
       const index = reservation.ids.indexOf(file.id);
@@ -105,19 +194,79 @@ export default function StoryManager({ onClose }: { onClose: () => void }) {
       setReservation(ids.length ? { ...reservation, ids } : null);
       setFiles(current => current.filter((_, i) => i !== index));
     }
-    setMessage('Arquivo removido.');
+    if (!silent) setMessage('Arquivo removido.');
   }
 
-  return <main aria-labelledby="story-manager-title" className="min-h-screen bg-neutral-950 px-5 py-8 text-white sm:px-8 sm:py-12">
-    <div className="mx-auto max-w-3xl">
-    <button disabled={busy} className="mb-8 inline-flex items-center gap-2 text-sm underline underline-offset-4 transition-colors enabled:cursor-pointer enabled:hover:text-red-300 disabled:opacity-50" onClick={onClose}>
+  async function removeSelected() {
+    const selectedFiles = album?.filter(file => selectedIds.includes(file.id)) ?? [];
+    if (!selectedFiles.length || !window.confirm(`Excluir permanentemente ${selectedFiles.length} arquivos desta história e liberar ${bytes(selectedFiles.reduce((sum, file) => sum + file.size, 0))}?`)) return;
+    setBusy(true);
+    setError('');
+    setMessage('');
+    let done = 0;
+    let failed = 0;
+    setDeletion({ total: selectedFiles.length, done, failed, name: '' });
+    try {
+      for (const file of selectedFiles) {
+        setDeletion({ total: selectedFiles.length, done, failed, name: file.name });
+        try {
+          await remove(file, true);
+          setSelectedIds(current => current.filter(id => id !== file.id));
+        } catch {
+          failed++;
+        }
+        done++;
+        setDeletion({ total: selectedFiles.length, done, failed, name: file.name });
+      }
+      setMessage(`${done - failed} de ${selectedFiles.length} arquivos removidos.`);
+      if (failed) setError(`${failed} arquivos não foram removidos. Eles continuam selecionados para você tentar novamente.`);
+      else setSelecting(false);
+      await refresh();
+    } catch (err) {
+      report(err);
+      await refresh().catch(report);
+    } finally {
+      setBusy(false);
+      setDeletion(null);
+    }
+  }
+
+  return <main aria-labelledby="story-manager-title" className="min-h-screen bg-[#171514] text-stone-100">
+    <header className="relative isolate overflow-hidden border-b border-white/15 bg-[#520e17]">
+      <img src="/images/intro_visita_virtual.jpg" alt="" className="absolute inset-y-0 right-0 -z-10 h-full w-2/3 object-cover object-center opacity-70 [mask-image:linear-gradient(to_right,transparent,black)] sm:w-1/2" />
+      <div className="mx-auto max-w-6xl px-5 py-7 sm:px-10 sm:py-10">
+    <button disabled={busy} className="mb-8 inline-flex items-center gap-2 text-sm text-white/90 enabled:cursor-pointer enabled:hover:underline disabled:opacity-50" onClick={onClose}>
       <ArrowLeft size={16} aria-hidden="true" /> Voltar ao painel
     </button>
-    <h1 id="story-manager-title" className="mb-6 text-4xl font-semibold">Histórias contadas</h1>
-    <fieldset disabled={busy} className="space-y-6 disabled:opacity-75">
-      {storage ? <section className="space-y-2 rounded bg-neutral-800 p-4">
-        <h3 className="text-xl">Armazenamento das histórias</h3>
+    <h1 id="story-manager-title" className="text-4xl leading-tight tracking-tight text-white sm:text-6xl">Histórias contadas</h1>
+      </div>
+    </header>
+    <div className="mx-auto max-w-6xl px-5 py-7 sm:px-10 sm:py-10">
+    {!!uploadTotal && <section ref={progressPanel} aria-label="Progresso do envio" className="sticky top-0 z-10 mb-5 space-y-2 rounded-xl border border-red-400/40 bg-neutral-900 p-4 shadow-xl">
+      <div className="flex flex-wrap items-center justify-between gap-2">
+        <strong role="status">{cancelling ? 'Cancelando envio…' : 'Enviando arquivos'} · {Math.floor(sent / uploadTotal * 100)}%</strong>
+        <button type="button" disabled={cancelling} className="rounded-lg border border-white/30 px-3 py-2 text-sm enabled:cursor-pointer enabled:hover:bg-white/10 disabled:opacity-50" onClick={() => {
+          cancelRequested.current = true;
+          activeTransfer.current?.abort();
+          setCancelling(true);
+        }}>Cancelar envio</button>
+      </div>
+      <progress aria-label="Total enviado" className="block h-2 w-full accent-red-500" max={uploadTotal} value={sent} />
+      <p className="break-words text-sm text-neutral-300">{bytes(sent)} de {bytes(uploadTotal)}{currentFile && ' · ' + currentFile}</p>
+    </section>}
+    {message && <p role="status" className="mb-5 rounded-lg border border-green-400/30 bg-green-950 p-3">{message}</p>}
+    {error && <p role="alert" className="mb-5 rounded-lg border border-amber-400/30 bg-amber-950 p-3 text-amber-200">{error}</p>}
+    {preparing && <section role="status" className="sticky top-0 z-20 mb-5 space-y-3 rounded-xl border border-rose-300/40 bg-neutral-900 p-4 shadow-xl">
+      <div className="flex flex-wrap items-center justify-between gap-3"><strong>Otimizando vídeo {preparing.index} de {preparing.total}</strong>
+        <button type="button" onClick={() => preparationController.current?.abort()} className="rounded border border-white/30 px-3 py-2 hover:bg-white/10">Cancelar otimização</button></div>
+      <p className="break-all text-sm">{preparing.name} · {preparing.percent}%</p>
+      <progress aria-label="Progresso da otimização" max={100} value={preparing.percent} className="block w-full accent-rose-400"/>
+    </section>}
+    <fieldset disabled={busy} className="grid min-w-0 gap-7 lg:grid-cols-[minmax(0,1fr)_17rem] lg:items-start">
+      {storage ? <section className="order-last space-y-3 border-t border-stone-600 pt-5 lg:col-start-2 lg:row-start-1">
+        <h2 className="text-xl">Armazenamento</h2>
         <p><strong>{bytes(available)} disponíveis</strong> de {bytes(storage.capacity)}</p>
+        <progress aria-label="Espaço ocupado no acervo" className="block h-2 w-full accent-rose-400" value={occupied} max={storage.capacity} />
         <p>{bytes(occupied - reserved)} publicados · {bytes(reserved)} reservados</p>
         <details><summary className="cursor-pointer underline underline-offset-4 transition-colors hover:text-red-300">Ajustar cota</summary>
           <form className="mt-3 space-y-2" onSubmit={event => {
@@ -134,39 +283,85 @@ export default function StoryManager({ onClose }: { onClose: () => void }) {
             <button className="underline underline-offset-4 transition-colors hover:text-red-300 enabled:cursor-pointer disabled:opacity-50">Salvar cota</button>
           </form>
         </details>
-      </section> : <button onClick={() => perform(refresh)}>Carregar armazenamento</button>}
-      <form className="space-y-3" onSubmit={event => { event.preventDefault(); void perform(upload); }}>
-        <h3 className="text-xl">Nova história</h3>
-        <label className="block">Título <input required disabled={!!reservation} maxLength={180} value={title} onChange={e => setTitle(e.target.value)}
-          className="mt-1 block w-full rounded border border-white/30 bg-neutral-900 p-2" /></label>
-        <label className="block">Fotos e vídeos
-          <input type="file" multiple disabled={!!reservation} accept={formats.join(',')} className="my-2 block w-full file:mr-2 file:rounded file:bg-neutral-700 file:p-2"
+      </section> : <button className="order-last rounded-lg border border-white/20 p-4 hover:bg-neutral-800 lg:col-start-2 lg:row-start-1" onClick={() => perform(refresh)}>Carregar armazenamento</button>}
+      {editing ? <form className="min-w-0 space-y-5 rounded-xl bg-[#292523] p-5 sm:p-8 lg:col-start-1 lg:row-start-1" onSubmit={event => { event.preventDefault(); void perform(prepareVideos); }}>
+        <button type="button" onClick={() => setEditing(false)} className="inline-flex items-center gap-2 text-sm text-stone-300 hover:text-white"><ArrowLeft size={16}/> Acervo</button>
+        <h2 className="text-3xl">Nova história</h2>
+        <label className="block">Título da história <input required disabled={!!reservation} maxLength={180} value={title} onChange={e => setTitle(e.target.value)}
+          placeholder="Ex.: Memórias de Maria" className="mt-2 block w-full rounded-lg border border-white/25 bg-neutral-950 p-3" /></label>
+        <label className="flex cursor-pointer flex-col items-center gap-2 rounded-lg border border-dashed border-stone-500 bg-[#211e1c] px-4 py-6 text-center transition-colors focus-within:ring-2 focus-within:ring-rose-300 hover:border-rose-300">
+          <Upload size={24} className="text-rose-200"/>
+          <span className="font-semibold">Escolher fotos e vídeos</span>
+          <span className="text-sm text-stone-300">Você pode escolher vários arquivos de uma vez.</span>
+          <input type="file" multiple disabled={!!reservation} accept={formats.join(',')} className="sr-only"
             onChange={e => { const added = Array.from(e.target.files || []); setFiles(current => [...current, ...added]); e.target.value = ''; }} />
         </label>
-        {!!files.length && <ul className="max-h-52 space-y-2 overflow-auto">{files.map((file, index) =>
-          <li key={index} className="flex items-center justify-between gap-3"><span className="break-all">{file.name} · {bytes(file.size)}</span>
-            {!reservation && <button type="button" className="underline underline-offset-4 transition-colors hover:text-red-300 enabled:cursor-pointer disabled:opacity-50" onClick={() => setFiles(current => current.filter((_, i) => i !== index))}>Retirar</button>}</li>)}</ul>}
-        {!uploadTotal && <p>Seleção de {bytes(selected)}{storage && !exceeds && ' · Após o envio, ' + bytes(reservation ? available : available - selected) + ' disponíveis.'}</p>}
+        {!!files.length && <ul aria-label="Arquivos selecionados" className="grid max-h-[52svh] grid-cols-2 gap-4 overflow-y-auto p-1 sm:grid-cols-3">
+          {files.map((file, index) => <MediaTile key={file.name + file.lastModified + index} file={file} size={bytes(file.size)}
+            onOpen={() => setPreview({ files, index })} onRemove={reservation ? undefined : () => setFiles(current => current.filter((_, i) => i !== index))}/>)}
+        </ul>}
+        {!!files.length && !uploadTotal && <p className="rounded-lg bg-neutral-800 p-3">{files.length} {files.length === 1 ? 'arquivo selecionado' : 'arquivos selecionados'} · {bytes(selected)}{storage && !exceeds && ' · Após o envio, ' + bytes(reservation ? available : available - selected) + ' disponíveis.'}</p>}
+        {!!toPrepare.length && <p className="text-sm text-stone-300">Ao enviar, os vídeos serão otimizados automaticamente neste dispositivo. Mantenha esta aba aberta até concluir.</p>}
         {storage && exceeds && !uploadTotal && <p role="alert" className="text-amber-300">A seleção excede o saldo em {bytes(selected - available)}. Retire arquivos ou ajuste a cota.</p>}
         {invalid && <p role="alert">Retire arquivos vazios ou incompatíveis. Formatos aceitos incluem JPEG, PNG, WebP, GIF, AVIF, MP4, WebM e MOV.</p>}
-        <button disabled={!storage || !files.length || !title.trim() || invalid || exceeds}
-          className="rounded bg-[#8B0000] px-5 py-2 font-semibold transition-colors enabled:cursor-pointer enabled:hover:bg-[#a30000] disabled:opacity-50">{reservation ? 'Continuar envio' : 'Publicar história'}</button>
-      </form>
-      {!!storage?.files.length && <section>
-        <h3 className="mb-3 text-xl">Arquivos do acervo</h3>
-        <ul className="divide-y divide-white/15">{storage.files.map(file => <li key={file.id} className="flex items-center justify-between gap-3 py-2">
-          <div className="min-w-0 break-words"><strong>{file.title}</strong><br />{file.name} · {bytes(file.size)} · {file.status === 'ready' ? 'Publicado' : 'Reserva pendente'}</div>
-          <button className="underline underline-offset-4 transition-colors hover:text-red-300 enabled:cursor-pointer disabled:opacity-50" onClick={() => {
-            if (window.confirm('Remover ' + file.name + ' do acervo e liberar o espaço?'))
-              void perform(() => remove(file));
-          }}>Remover</button>
-        </li>)}</ul>
+        <button disabled={!storage || !files.length || !title.trim() || invalid || (exceeds && !toPrepare.length)}
+          className="rounded bg-[#8B0000] px-5 py-2 font-semibold transition-colors enabled:cursor-pointer enabled:hover:bg-[#a30000] disabled:opacity-50">{reservation ? 'Continuar envio' : 'Enviar'}</button>
+      </form> : <section className="min-w-0 lg:col-start-1 lg:row-start-1">
+        {album ? <>
+          <button className="mb-4 inline-flex items-center gap-2 text-sm text-stone-300 hover:text-white" onClick={() => { setAlbumId(''); setSelecting(false); setSelectedIds([]); }}><ArrowLeft size={16}/> Todas as histórias</button>
+          <h2 className="mb-5 break-words text-3xl">{album[0].title}</h2>
+          <div className="sticky top-0 z-10 mb-5 rounded-xl border border-white/15 bg-neutral-900 p-4 shadow-lg">
+            {deletion ? <div role="status" aria-live="polite" className="space-y-2">
+              <div className="flex items-center justify-between gap-3"><strong>Excluindo arquivos</strong><span>{deletion.done} de {deletion.total}</span></div>
+              <progress aria-label="Progresso da exclusão" value={deletion.done} max={deletion.total} className="block h-2 w-full accent-rose-400"/>
+              <p className="truncate text-sm text-stone-300">{deletion.name}</p>
+              {!!deletion.failed && <p className="text-sm text-amber-200">{deletion.failed} falhas. Você poderá tentar novamente.</p>}
+            </div> : selecting ? <>
+              <div className="flex flex-wrap items-center justify-between gap-3">
+                <span className="font-medium">{selectedIds.length} selecionados · {bytes(album.filter(file => selectedIds.includes(file.id)).reduce((sum, file) => sum + file.size, 0))}</span>
+                <button type="button" className="cursor-pointer text-sm text-stone-300 hover:text-white" onClick={() => { setSelecting(false); setSelectedIds([]); }}>Concluir seleção</button>
+              </div>
+              <div className="mt-3 flex flex-wrap items-center justify-between gap-3">
+                <button type="button" className="cursor-pointer text-sm underline hover:text-rose-200" onClick={() => setSelectedIds(selectedIds.length === album.length ? [] : album.map(file => file.id))}>{selectedIds.length === album.length ? 'Desmarcar todos' : 'Selecionar todos'}</button>
+                <button type="button" disabled={!selectedIds.length} onClick={removeSelected} className="inline-flex items-center gap-2 rounded-lg bg-[#a52a37] px-4 py-2.5 text-sm font-semibold enabled:cursor-pointer enabled:hover:bg-[#bd3543] disabled:opacity-40"><Trash2 size={16}/> Excluir selecionados</button>
+              </div>
+            </> : <button type="button" className="cursor-pointer rounded-lg border border-white/25 px-4 py-2 text-sm hover:bg-white/10" onClick={() => setSelecting(true)}>Selecionar arquivos</button>}
+          </div>
+          <ul className="grid grid-cols-2 gap-x-4 gap-y-6 sm:grid-cols-3">
+            {album.map(file => <MediaTile key={file.id} file={file} size={bytes(file.size)} selected={selectedIds.includes(file.id)} onSelect={selecting ? checked => setSelectedIds(current => checked ? [...current, file.id] : current.filter(id => id !== file.id)) : undefined} onOpen={() => {
+              const published = album.filter(item => item.status === 'ready');
+              setPreview({ files: published, index: published.indexOf(file) });
+            }} onRemove={selecting ? undefined : () => {
+              if (window.confirm('Remover ' + file.name + ' do acervo e liberar o espaço?')) void perform(() => remove(file));
+            }}/>)}
+          </ul>
+        </> : <>
+          <div className="mb-6 flex flex-wrap items-center justify-between gap-3">
+            <h2 className="text-3xl">Acervo</h2>
+            <button onClick={() => setEditing(true)} className="inline-flex cursor-pointer items-center gap-2 rounded-lg bg-[#a52a37] px-4 py-2.5 font-semibold text-white hover:bg-[#bd3543]"><Plus size={18}/>{files.length || title ? 'Continuar história' : 'Nova história'}</button>
+          </div>
+          {storage && !collections.size && <div className="rounded-xl border border-dashed border-stone-600 px-5 py-12 text-center">
+            <BookOpen aria-hidden="true" className="mx-auto mb-4 text-rose-300" size={32}/>
+            <h3 className="text-2xl">Sua primeira história</h3><p className="mt-2 text-stone-300">Escolha “Nova história” para reunir as fotos e os vídeos.</p>
+          </div>}
+          <div className="grid gap-5 sm:grid-cols-2">
+            {Array.from(collections, ([id, group]) => {
+              const cover = group.find(file => file.status === 'ready' && file.type.startsWith('image/'));
+              return <button key={id} onClick={() => { setAlbumId(id); setSelectedIds([]); setSelecting(false); }} className="group min-w-0 cursor-pointer overflow-hidden rounded-lg border border-white/15 bg-[#262321] text-left transition-colors hover:border-rose-300">
+                <span className="grid aspect-[16/10] place-items-center overflow-hidden bg-[#48242a]">
+                  {cover ? <img loading="lazy" decoding="async" alt="" src={galleryImageUrl(cover)} onError={event => {
+                    if (event.currentTarget.src.endsWith('?preview=1')) event.currentTarget.src = '/api/stories/' + cover.id + '/media';
+                  }} className="size-full object-cover transition-transform motion-safe:group-hover:scale-[1.03]"/> : <BookOpen size={36}/>}
+                </span>
+                <span className="block p-4"><span className="font-display block break-words text-2xl leading-tight">{group[0].title}</span>
+                <span className="mt-2 block text-sm text-stone-300">{group.length} {group.length === 1 ? 'arquivo' : 'arquivos'} · {bytes(group.reduce((sum,file) => sum + file.size, 0))}</span></span>
+              </button>;
+            })}
+          </div>
+        </>}
       </section>}
     </fieldset>
-    {!!uploadTotal && <div role="status" className="mt-4">Enviando {bytes(sent)} de {bytes(uploadTotal)}
-      <progress className="block w-full" max={uploadTotal} value={sent} /></div>}
-    {message && <p role="status" className="mt-4">{message}</p>}
-    {error && <p role="alert" className="mt-4 text-amber-300">{error} {uploadTotal > 0 || reserved > 0 ? 'Envios incompletos podem ser removidos na lista de arquivos.' : ''}</p>}
+    {preview && <MediaPreview files={preview.files} initialIndex={preview.index} onClose={() => setPreview(null)} />}
     </div>
   </main>;
 }

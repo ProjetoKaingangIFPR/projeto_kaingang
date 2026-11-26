@@ -50,7 +50,14 @@ test('reserva concorrente, alteração da cota e publicação multipart no D1 e 
   const stream = await stories.request('/stories/' + id + '/media', { headers: { Range: 'bytes=-2' } }, env);
   assert.equal(stream.status, 206);
   assert.deepEqual(new Uint8Array(await stream.arrayBuffer()), new Uint8Array([42, 43]));
+  const etag = stream.headers.get('ETag');
+  assert.ok(etag);
+  const revalidate = () => app.request('/api/stories/' + id + '/media', { headers: { 'If-None-Match': etag } }, env);
+  const cached = await revalidate();
+  assert.equal(cached.status, 304);
+  assert.equal(cached.headers.get('Cache-Control'), 'private, no-cache');
   assert.equal((await request(path, 'DELETE')).status, 200);
+  assert.equal((await revalidate()).status, 404);
   assert.equal(await env.MEDIA.head('stories/' + id), null);
   assert.deepEqual(await (await request('/stories')).json(), []);
 });

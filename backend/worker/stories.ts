@@ -2,6 +2,7 @@ import { Hono } from 'hono';
 import { bodyLimit } from 'hono/body-limit';
 import { z } from 'zod';
 import type { Env } from './env';
+import { jpegPreview } from './jpeg-preview';
 
 export const stories = new Hono<{ Bindings: Env }>();
 const chunkSize = 8 * 1024 * 1024;
@@ -106,9 +107,11 @@ stories.post('/admin/stories/:id/finish', bodyLimit({ maxSize: 1024 * 1024 }), a
 
 stories.delete('/admin/stories/:id', async c => {
   const id = c.req.param('id');
-  await c.env.DB.prepare("UPDATE story_files SET status='deleting' WHERE id=?").bind(id).run();
+  const pendingOnly = c.req.query('pendingOnly') === '1';
+  await c.env.DB.prepare("UPDATE story_files SET status='deleting' WHERE id=? AND (?=0 OR status!='ready')")
+    .bind(id, pendingOnly ? 1 : 0).run();
   const file = await item(c.env, id);
-  if (file) {
+  if (file?.status === 'deleting') {
     if (file.upload_id) {
       try { await c.env.MEDIA.resumeMultipartUpload(key(id), file.upload_id).abort(); }
       catch (error) {
@@ -125,7 +128,25 @@ stories.get('/stories/:id/media', async c => {
   const file = await item(c.env, c.req.param('id'));
   if (file?.status !== 'ready') return c.notFound();
   const headers = new Headers({ 'Content-Type': file.type, 'Accept-Ranges': 'bytes', 'X-Content-Type-Options': 'nosniff' });
-  const range = c.req.header('Range');
+  const preview = c.req.query('preview') === '1' && file.type === 'image/jpeg' && file.size > 128 * 1024;
+  const range = preview ? undefined : c.req.header('Range');
+  if (preview) headers.set('Accept-Ranges', 'none');
+  const etag = '"' + file.id + (preview ? '-preview' : '') + '"';
+  // IDs are unique. Revalidate visibility after deletion, then reuse the stored bytes.
+  headers.set('Cache-Control', 'private, no-cache');
+  headers.set('ETag', etag);
+  if (!range && c.req.header('If-None-Match') === etag) return new Response(null, { status: 304, headers });
+  if (preview) {
+    const prefix = await c.env.MEDIA.get(key(file.id), { range: { offset: 0, length: 128 * 1024 } });
+    if (!prefix) return c.notFound();
+    const thumbnail = jpegPreview(await prefix.arrayBuffer());
+    if (thumbnail) {
+      headers.set('Content-Length', String(thumbnail.byteLength));
+      return new Response(thumbnail, { headers });
+    }
+    // Reuse the same browser cache entry as the full-screen viewer.
+    return new Response(null, { status: 302, headers: { Location: new URL(c.req.url).pathname, 'Cache-Control': 'private, max-age=300' } });
+  }
   let start = 0, end = file.size - 1;
   if (range) {
     const match = /^bytes=(\d*)-(\d*)$/.exec(range);
