@@ -10,6 +10,7 @@ import VirtualVisitsPage from "./VirtualVisitsPage";
 import AdminPage from "./admin/AdminPage";
 import { AboutSection } from "./components/sections/AboutSection";
 import { StoriesSection } from "./components/sections/StoriesSection";
+import { SchoolMemoriesPage } from "./components/sections/SchoolMemoriesPage";
 
 function MainApp() {
   const [activeSection, setActiveSection] = useState("inicio");
@@ -17,8 +18,8 @@ function MainApp() {
 
   const handleNavSelect = (id: string) => {
     setActiveSection(id);
-    if (id === "sobre" || id === "historias") {
-      window.history.pushState({}, "", id === "sobre" ? "/sobre" : "/historias-contadas");
+    if (id === "sobre" || id === "historias" || id === "escola" || id === "memorias-escola") {
+      window.history.pushState({}, "", id === "sobre" ? "/sobre" : id === "historias" ? "/historias-contadas" : "/memorias-da-escola");
       window.dispatchEvent(new PopStateEvent("popstate"));
       window.scrollTo(0, 0);
       return;
@@ -28,9 +29,6 @@ function MainApp() {
     } else if (id === "visitas" || id === "visitas-info") {
       window.history.pushState({}, "", "/visitas-virtuais");
       window.dispatchEvent(new PopStateEvent("popstate"));
-    } else if (id === "memorias-escola" || id === "escola") {
-      const el = document.getElementById("memorias-escola");
-      if (el) el.scrollIntoView({ behavior: "smooth" });
     } else if (
       id === "contato" ||
       id === "fale-conosco" ||
@@ -84,11 +82,12 @@ export default function App() {
   if (pathname === "/painel" || pathname === "/painel/") return <AdminPage />;
 
   const isStoriesPage = pathname === "/historias-contadas" || pathname === "/historias-contadas/";
+  const isSchoolPage = pathname === "/memorias-da-escola" || pathname === "/memorias-da-escola/";
 
-  if (pathname === "/sobre" || pathname === "/sobre/" || isStoriesPage) {
+  if (pathname === "/sobre" || pathname === "/sobre/" || isStoriesPage || isSchoolPage) {
     const navigateFromAbout = (id: string) => {
-      if (id === "sobre" || id === "historias") {
-        window.history.pushState({}, "", id === "sobre" ? "/sobre" : "/historias-contadas");
+      if (id === "sobre" || id === "historias" || id === "escola" || id === "memorias-escola") {
+        window.history.pushState({}, "", id === "sobre" ? "/sobre" : id === "historias" ? "/historias-contadas" : "/memorias-da-escola");
         window.dispatchEvent(new PopStateEvent("popstate"));
         window.scrollTo(0, 0);
         return;
@@ -104,8 +103,8 @@ export default function App() {
     };
     return (
       <div className="min-h-screen bg-neutral-950 font-sans flex flex-col">
-        <Navbar activeSection={isStoriesPage ? "historias" : "sobre"} onSelectNav={navigateFromAbout} />
-        <main className="flex-1">{isStoriesPage ? <StoriesSection /> : <AboutSection />}</main>
+        <Navbar activeSection={isSchoolPage ? "escola" : isStoriesPage ? "historias" : "sobre"} onSelectNav={navigateFromAbout} />
+        <main className="flex-1">{isSchoolPage ? <SchoolMemoriesPage /> : isStoriesPage ? <StoriesSection /> : <AboutSection />}</main>
         {!isStoriesPage && <Footer onSelectNav={navigateFromAbout} />}
       </div>
     );

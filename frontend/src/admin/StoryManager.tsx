@@ -8,7 +8,7 @@ import { uploadParts, type UploadedPart } from './uploadParts';
 import { mediaFormats as formats, mediaAccept, normalizeMedia } from './mediaFormats';
 import RecordMetadataEditor, { type RecordMetadata } from './RecordMetadataEditor';
 
-type Storage = { files: StoryFile[]; capacity: number };
+type Storage = { files: StoryFile[]; capacity: number; occupied?: number; reserved?: number };
 type Reservation = { ids: string[]; chunkSize: number };
 const endpoint = '/api/admin/stories';
 function bytes(value: number) {
@@ -17,7 +17,9 @@ function bytes(value: number) {
   return (value / divisor).toLocaleString('pt-BR', { maximumFractionDigits: 2 }) + ' ' + unit;
 }
 
-export default function StoryManager({ onClose }: { onClose: () => void }) {
+export default function StoryManager({ onClose, culturalWeeks = false }: { onClose: () => void; culturalWeeks?: boolean }) {
+  const [culturalYear, setCulturalYear] = useState(String(new Date().getFullYear()));
+  const pageTitle = culturalWeeks ? 'Memórias da Escola' : 'Histórias contadas';
   const [preview, setPreview] = useState<{ files: MediaFile[]; index: number } | null>(null);
   const [albumId, setAlbumId] = useState('');
   const [renaming, setRenaming] = useState(false);
@@ -51,7 +53,7 @@ export default function StoryManager({ onClose }: { onClose: () => void }) {
   }, [uploadTotal]);
   const refresh = async () => {
     try {
-      setStorage(await api<Storage>(endpoint));
+      setStorage(await api<Storage>(culturalWeeks ? '/api/admin/cultural-weeks' : endpoint));
     } catch (err) {
       if (err instanceof ApiError && err.status === 404) {
         throw new Error('A API deste ambiente ainda não disponibiliza o acervo de histórias. Verifique a versão do Worker que atende o site.');
@@ -83,8 +85,8 @@ export default function StoryManager({ onClose }: { onClose: () => void }) {
     else collections.set(file.collection, [file]);
   }
   const album = collections.get(albumId);
-  const occupied = storage?.files.reduce((sum, file) => sum + file.size, 0) ?? 0;
-  const reserved = storage?.files.filter(file => file.status !== 'ready').reduce((sum, file) => sum + file.size, 0) ?? 0;
+  const occupied = storage?.occupied ?? storage?.files.reduce((sum, file) => sum + file.size, 0) ?? 0;
+  const reserved = storage?.reserved ?? storage?.files.filter(file => file.status !== 'ready').reduce((sum, file) => sum + file.size, 0) ?? 0;
   const available = (storage?.capacity ?? 0) - occupied;
   const exceeds = !reservation && selected > available;
   const invalid = files.some(file => !file.size || !formats.includes(file.type));
@@ -134,8 +136,8 @@ export default function StoryManager({ onClose }: { onClose: () => void }) {
     activeTransfer.current = transfer;
     setUploadTotal(uploadFiles.reduce((sum, file) => sum + file.size, 0));
     setSent(0);
-    const batch = reservation ?? await api<Reservation>(endpoint, {
-      method: 'POST', body: JSON.stringify({ title: title.trim(), files: uploadFiles.map(file => ({
+    const batch = reservation ?? await api<Reservation>(culturalWeeks ? '/api/admin/cultural-weeks' : endpoint, {
+      method: 'POST', body: JSON.stringify({ title: title.trim(), kind: culturalWeeks ? 'culture' : 'story', ...(culturalWeeks ? { year: Number(culturalYear) } : {}), files: uploadFiles.map(file => ({
         name: file.name, size: file.size, type: file.type,
         ...metadata.current.get(originals.current.get(file) ?? file),
       })) }),
@@ -259,7 +261,7 @@ export default function StoryManager({ onClose }: { onClose: () => void }) {
     <button disabled={busy} className="mb-8 inline-flex items-center gap-2 text-sm text-white/90 enabled:cursor-pointer enabled:hover:underline disabled:opacity-50" onClick={onClose}>
       <ArrowLeft size={16} aria-hidden="true" /> Voltar ao painel
     </button>
-    <h1 id="story-manager-title" className="text-4xl leading-tight tracking-tight text-white sm:text-6xl">Histórias contadas</h1>
+    <h1 id="story-manager-title" className="text-4xl leading-tight tracking-tight text-white sm:text-6xl">{pageTitle}</h1>
       </div>
     </header>
     <div className="mx-auto max-w-6xl px-5 py-7 sm:px-10 sm:py-10">
@@ -285,7 +287,8 @@ export default function StoryManager({ onClose }: { onClose: () => void }) {
     </section>}
     <fieldset disabled={busy} className="grid min-w-0 gap-7 lg:grid-cols-[minmax(0,1fr)_17rem] lg:items-start">
       {storage ? <section className="order-last space-y-3 border-t border-stone-600 pt-5 lg:col-start-2 lg:row-start-1">
-        <h2 className="text-xl">Armazenamento</h2>
+        <h2 className="text-xl">Armazenamento do acervo</h2>
+        <p className="text-sm text-white/60">Espaço compartilhado pelas histórias e semanas culturais.</p>
         <p><strong>{bytes(available)} disponíveis</strong> de {bytes(storage.capacity)}</p>
         <progress aria-label="Espaço ocupado no acervo" className="block h-2 w-full accent-rose-400" value={occupied} max={storage.capacity} />
         <p>{bytes(occupied - reserved)} publicados · {bytes(reserved)} reservados</p>
@@ -307,9 +310,13 @@ export default function StoryManager({ onClose }: { onClose: () => void }) {
       </section> : <button className="order-last rounded-lg border border-white/20 p-4 hover:bg-neutral-800 lg:col-start-2 lg:row-start-1" onClick={() => perform(refresh)}>Carregar armazenamento</button>}
       {editing ? <form className="min-w-0 space-y-5 rounded-xl bg-[#292523] p-5 sm:p-8 lg:col-start-1 lg:row-start-1" onSubmit={event => { event.preventDefault(); void perform(prepareVideos); }}>
         <button type="button" onClick={() => setEditing(false)} className="inline-flex items-center gap-2 text-sm text-stone-300 hover:text-white"><ArrowLeft size={16}/> Acervo</button>
-        <h2 className="text-3xl">Nova história</h2>
-        <label className="block">Título da história <input required disabled={!!reservation} maxLength={180} value={title} onChange={e => setTitle(e.target.value)}
-          placeholder="Ex.: Memórias de Maria" className="mt-2 block w-full rounded-lg border border-white/25 bg-neutral-950 p-3" /></label>
+        <h2 className="text-3xl">{culturalWeeks ? 'Novo álbum' : 'Nova história'}</h2>
+        {culturalWeeks && <label className="block">Ano da semana cultural
+          <input type="number" required min={1900} max={2100} step={1} disabled={!!reservation} value={culturalYear} onChange={event => setCulturalYear(event.target.value)}
+            className="mt-2 block w-full rounded-lg border border-white/25 bg-neutral-950 p-3"/>
+        </label>}
+        <label className="block">{culturalWeeks ? 'Título do álbum' : 'Título da história'} <input required disabled={!!reservation} maxLength={180} value={title} onChange={e => setTitle(e.target.value)}
+          placeholder={culturalWeeks ? 'Ex.: Semana cultural da escola' : 'Ex.: Memórias de Maria'} className="mt-2 block w-full rounded-lg border border-white/25 bg-neutral-950 p-3" /></label>
         <label className="flex cursor-pointer flex-col items-center gap-2 rounded-lg border border-dashed border-stone-500 bg-[#211e1c] px-4 py-6 text-center transition-colors focus-within:ring-2 focus-within:ring-rose-300 hover:border-rose-300">
           <Upload size={24} className="text-rose-200"/>
           <span className="font-semibold">Escolher fotos, vídeos e áudios</span>
@@ -333,7 +340,7 @@ export default function StoryManager({ onClose }: { onClose: () => void }) {
       </form> : <section className="min-w-0 lg:col-start-1 lg:row-start-1">
         {album ? <>
           <button className="mb-4 inline-flex items-center gap-2 text-sm text-stone-300 hover:text-white" onClick={() => { setAlbumId(''); setSelecting(false); setSelectedIds([]); }}><ArrowLeft size={16}/> Todas as histórias</button>
-          <h2 className="mb-5 break-words text-3xl">{album[0].title}</h2>
+          <h2 className="mb-5 break-words text-3xl">{album[0].title}</h2>{culturalWeeks && <p className="mb-4 text-white/60">Semana cultural {album[0].cultural_year}</p>}
           {renaming ? <form className="mb-5 space-y-3 rounded-lg border border-white/15 bg-neutral-900 p-4" onSubmit={event => {
             event.preventDefault();
             void perform(async () => {
@@ -342,7 +349,7 @@ export default function StoryManager({ onClose }: { onClose: () => void }) {
               setMessage('Título atualizado.');
             });
           }}>
-            <label className="block text-sm">Título da história
+            <label className="block text-sm">{culturalWeeks ? 'Título do álbum' : 'Título da história'}
               <input autoFocus required maxLength={180} value={newTitle} onChange={event => setNewTitle(event.target.value)}
                 className="mt-2 block w-full rounded border border-white/25 bg-neutral-950 p-3"/>
             </label>
@@ -389,12 +396,12 @@ export default function StoryManager({ onClose }: { onClose: () => void }) {
           </ul>
         </> : <>
           <div className="mb-6 flex flex-wrap items-center justify-between gap-3">
-            <h2 className="text-3xl">Acervo</h2>
-            <button onClick={() => setEditing(true)} className="inline-flex cursor-pointer items-center gap-2 rounded-lg bg-[#a52a37] px-4 py-2.5 font-semibold text-white hover:bg-[#bd3543]"><Plus size={18}/>{files.length || title ? 'Continuar história' : 'Nova história'}</button>
+            <h2 className="text-3xl">{culturalWeeks ? 'Acervo das semanas culturais' : 'Acervo'}</h2>
+            <button onClick={() => setEditing(true)} className="inline-flex cursor-pointer items-center gap-2 rounded-lg bg-[#a52a37] px-4 py-2.5 font-semibold text-white hover:bg-[#bd3543]"><Plus size={18}/>{files.length || title ? (culturalWeeks ? 'Continuar álbum' : 'Continuar história') : (culturalWeeks ? 'Novo álbum' : 'Nova história')}</button>
           </div>
           {storage && !collections.size && <div className="rounded-xl border border-dashed border-stone-600 px-5 py-12 text-center">
             <BookOpen aria-hidden="true" className="mx-auto mb-4 text-rose-300" size={32}/>
-            <h3 className="text-2xl">Sua primeira história</h3><p className="mt-2 text-stone-300">Escolha “Nova história” para reunir fotos, vídeos e áudios.</p>
+            <h3 className="text-2xl">{culturalWeeks ? 'Seu primeiro álbum' : 'Sua primeira história'}</h3><p className="mt-2 text-stone-300">{culturalWeeks ? 'Escolha “Novo álbum” para cadastrar o ano e seus registros.' : 'Escolha “Nova história” para reunir fotos, vídeos e áudios.'}</p>
           </div>}
           <div className="grid gap-5 sm:grid-cols-2">
             {Array.from(collections, ([id, group]) => {
@@ -406,7 +413,7 @@ export default function StoryManager({ onClose }: { onClose: () => void }) {
                   }} className="size-full object-cover transition-transform motion-safe:group-hover:scale-[1.03]"/> : <BookOpen size={36}/>}
                 </span>
                 <span className="block p-4"><span className="font-display block break-words text-2xl leading-tight">{group[0].title}</span>
-                <span className="mt-2 block text-sm text-stone-300">{group.length} {group.length === 1 ? 'arquivo' : 'arquivos'} · {bytes(group.reduce((sum,file) => sum + file.size, 0))}</span></span>
+                <span className="mt-2 block text-sm text-stone-300">{culturalWeeks && <span className="mr-2">{group[0].cultural_year} ·</span>}{group.length} {group.length === 1 ? 'arquivo' : 'arquivos'} · {bytes(group.reduce((sum,file) => sum + file.size, 0))}</span></span>
               </button>;
             })}
           </div>

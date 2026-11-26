@@ -30,6 +30,8 @@ export default function VirtualVisitsPage(props: VirtualVisitsPageProps) {
       ? "/sobre"
       : id === "historias"
         ? "/historias-contadas"
+        : id === "escola" || id === "memorias-escola"
+          ? "/memorias-da-escola"
         : `/#${id === "escola" ? "memorias-escola" : id}`;
     window.history.pushState({}, "", destination);
     window.dispatchEvent(new PopStateEvent("popstate"));

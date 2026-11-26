@@ -12,7 +12,7 @@ export const NAVIGATION_ITEMS: NavItem[] = [
   {
     id: "escola",
     label: "Memórias da Escola",
-    href: "#memorias-escola",
+    href: "/memorias-da-escola",
     description:
       "Histórico da educação escolar indígena, arquivos de fotos antigas e depoimentos dos primeiros professores.",
   },

@@ -1,4 +1,4 @@
-import { Hono } from 'hono';
+import { Hono, type Handler } from 'hono';
 import { bodyLimit } from 'hono/body-limit';
 import { z } from 'zod';
 import type { Env } from './env';
@@ -11,6 +11,8 @@ const formats = ['image/jpeg', 'image/png', 'image/webp', 'image/gif', 'image/av
   'video/mp4', 'video/webm', 'video/quicktime', 'video/x-matroska',
   'audio/mpeg', 'audio/mp4', 'audio/wav', 'audio/ogg', 'audio/aac', 'audio/flac', 'audio/webm'] as const;
 const selection = z.object({
+  kind: z.enum(['story', 'culture']).default('story'),
+  year: z.number().int().min(1900).max(2100).optional(),
   title: z.string().trim().min(1).max(180),
   files: z.array(z.object({
     name: z.string().trim().min(1).max(255),
@@ -20,9 +22,9 @@ const selection = z.object({
     recorded_on: z.iso.date().nullable().optional(),
   })).min(1),
 });
-type Item = { id: string; size: number; type: string; upload_id: string | null; status: string };
+type Item = { id: string; size: number; type: string; upload_id: string | null; status: string; object_key: string | null };
 const item = (env: Env, id: string) => env.DB.prepare('SELECT * FROM story_files WHERE id=?').bind(id).first<Item>();
-const key = (id: string) => 'stories/' + id;
+const key = (file: Item) => file.object_key ?? 'stories/' + file.id;
 const fields = 'id, collection, title, name, type, size, status, author, recorded_on';
 const ordering = ' ORDER BY recorded_on IS NULL, recorded_on ASC, created ASC, collection, position, id';
 
@@ -48,14 +50,35 @@ stories.patch('/admin/stories/:id', bodyLimit({ maxSize: 4096 }), async c => {
 });
 
 stories.get('/stories', async c => {
-  const { results } = await c.env.DB.prepare('SELECT ' + fields + " FROM story_files WHERE status='ready'" + ordering).all();
+  const { results } = await c.env.DB.prepare('SELECT ' + fields + " FROM story_files WHERE status='ready' AND kind='story'" + ordering).all();
   return c.json(results);
 });
-stories.get('/admin/stories', async c => {
-  const { results } = await c.env.DB.prepare('SELECT ' + fields + ' FROM story_files' + ordering).all();
-  const capacity = await c.env.DB.prepare('SELECT capacity FROM story_storage WHERE id=1').first<number>('capacity');
-  return c.json({ files: results, capacity });
+stories.get('/cultural-weeks', async c => {
+  const { results } = await c.env.DB.prepare("SELECT id, name, type, author, recorded_on, cultural_year FROM story_files WHERE kind='culture' AND status='ready' ORDER BY cultural_year DESC, recorded_on IS NULL, recorded_on, created, position, id")
+    .all<{ id: string; name: string; type: string; author: string | null; recorded_on: string | null; cultural_year: number }>();
+  const albums = new Map<number, { year: number; photos: { src: string; thumbnail: string; caption: string; type: string }[] }>();
+  for (const file of results) {
+    const album = albums.get(file.cultural_year) ?? { year: file.cultural_year, photos: [] };
+    album.photos.push({
+      src: '/api/stories/' + file.id + '/media',
+      thumbnail: '/api/stories/' + file.id + '/media?preview=1',
+      type: file.type,
+      caption: [file.author, file.recorded_on?.split('-').reverse().join('/')].filter(Boolean).join(' · '),
+    });
+    albums.set(file.cultural_year, album);
+  }
+  return c.json(Array.from(albums.values()));
 });
+const listCollections: Handler<{ Bindings: Env }> = async c => {
+  const kind = c.req.path.endsWith('/cultural-weeks') || c.req.query('kind') === 'culture' ? 'culture' : 'story';
+  const { results } = await c.env.DB.prepare('SELECT ' + fields + ', cultural_year FROM story_files WHERE kind=?' + ordering).bind(kind).all();
+  const capacity = await c.env.DB.prepare('SELECT capacity FROM story_storage WHERE id=1').first<number>('capacity');
+  const usage = await c.env.DB.prepare("SELECT COALESCE(SUM(size),0) AS occupied, COALESCE(SUM(CASE WHEN status!='ready' THEN size ELSE 0 END),0) AS reserved FROM story_files")
+    .first<{ occupied: number; reserved: number }>();
+  return c.json({ files: results, capacity, occupied: usage?.occupied ?? 0, reserved: usage?.reserved ?? 0 });
+};
+stories.get('/admin/stories', listCollections);
+stories.get('/admin/cultural-weeks', listCollections);
 stories.put('/admin/stories/quota', bodyLimit({ maxSize: 1024 }), async c => {
   const parsed = z.object({ capacity: z.number().int().positive() }).safeParse(await c.req.json().catch(() => null));
   if (!parsed.success) return c.json({ error: 'Informe uma cota válida.' }, 400);
@@ -65,36 +88,47 @@ stories.put('/admin/stories/quota', bodyLimit({ maxSize: 1024 }), async c => {
   if (!saved.meta.changes) return c.json({ error: 'A cota deve cobrir os arquivos publicados e reservados.' }, 409);
   return c.json({ capacity });
 });
-stories.post('/admin/stories', bodyLimit({ maxSize: 1024 * 1024 }), async c => {
+const createCollection: Handler<{ Bindings: Env }> = async c => {
   if (!c.env.MEDIA) return c.json({ error: 'Configure o bucket R2.' }, 503);
   const parsed = selection.safeParse(await c.req.json().catch(() => null));
   if (!parsed.success) return c.json({ error: 'Confira o título, o formato e o tamanho dos arquivos.' }, 400);
   const { title, files } = parsed.data;
+  const kind = c.req.path.endsWith('/cultural-weeks') ? 'culture' : parsed.data.kind;
+  const { year } = parsed.data;
+  if (kind === 'culture' && !year)
+    return c.json({ error: 'Informe o ano da semana cultural.' }, 400);
   const group = crypto.randomUUID();
-  const entries = files.map(file => ({ ...file, id: crypto.randomUUID() }));
+  const entries = files.map(file => {
+    const id = crypto.randomUUID();
+    return { ...file, id, object_key: kind === 'culture'
+      ? 'memorias-escola/' + year + '/' + group + '/' + id
+      : 'historias/' + group + '/' + id };
+  });
   const total = files.reduce((sum, file) => sum + file.size, 0);
   // Uma única escrita reserva o lote inteiro, inclusive com administradores simultâneos.
   const inserted = await c.env.DB.prepare(`INSERT INTO story_files
-    (id, collection, title, name, type, size, created, position, author, recorded_on)
-    SELECT value->>'id', ?, ?, value->>'name', value->>'type', value->>'size', ?, key, NULLIF(value->>'author',''), value->>'recorded_on'
+    (id, collection, title, name, type, size, created, position, author, recorded_on, kind, cultural_year, object_key)
+    SELECT value->>'id', ?, ?, value->>'name', value->>'type', value->>'size', ?, key, NULLIF(value->>'author',''), value->>'recorded_on', ?, ?, value->>'object_key'
     FROM json_each(?) WHERE (SELECT COALESCE(SUM(size),0) FROM story_files) + ? <= (SELECT capacity FROM story_storage WHERE id=1)`)
-    .bind(group, title, Date.now(), JSON.stringify(entries), total).run();
+    .bind(group, title, Date.now(), kind, kind === 'culture' ? year! : null, JSON.stringify(entries), total).run();
   if (!inserted.meta.changes) return c.json({ error: 'Espaço insuficiente para esta seleção.' }, 409);
   return c.json({ ids: entries.map(entry => entry.id), chunkSize }, 201);
-});
+};
+stories.post('/admin/stories', bodyLimit({ maxSize: 1024 * 1024 }), createCollection);
+stories.post('/admin/cultural-weeks', bodyLimit({ maxSize: 1024 * 1024 }), createCollection);
 
 stories.post('/admin/stories/:id/start', async c => {
   const id = c.req.param('id');
   const file = await item(c.env, id);
   if (file?.status === 'ready') return c.json({ published: true });
   if (file?.status !== 'pending') return c.json({ error: 'Envio indisponível.' }, 409);
-  if (file.upload_id && (await c.env.MEDIA.head(key(id)))?.size === file.size) {
+  if (file.upload_id && (await c.env.MEDIA.head(key(file)))?.size === file.size) {
     const saved = await c.env.DB.prepare("UPDATE story_files SET status='ready',upload_id=NULL WHERE id=? AND status='pending'").bind(id).run();
     if (saved.meta.changes) return c.json({ published: true });
     return c.json({ error: 'O arquivo foi alterado durante o envio.' }, 409);
   }
   if (!file.upload_id) {
-    const upload = await c.env.MEDIA.createMultipartUpload(key(id), { httpMetadata: { contentType: file.type } });
+    const upload = await c.env.MEDIA.createMultipartUpload(key(file), { httpMetadata: { contentType: file.type } });
     const result = await c.env.DB.prepare("UPDATE story_files SET upload_id=? WHERE id=? AND status='pending' AND upload_id IS NULL")
       .bind(upload.uploadId, id).run();
     if (!result.meta.changes) await upload.abort();
@@ -111,7 +145,7 @@ stories.put('/admin/stories/:id/parts/:number', bodyLimit({ maxSize: chunkSize }
   const bytes = await c.req.arrayBuffer();
   if (bytes.byteLength !== Math.min(chunkSize, file.size - (number - 1) * chunkSize))
     return c.json({ error: 'Parte incompleta.' }, 400);
-  const upload = c.env.MEDIA.resumeMultipartUpload(key(file.id), file.upload_id);
+  const upload = c.env.MEDIA.resumeMultipartUpload(key(file), file.upload_id);
   return c.json(await upload.uploadPart(number, bytes));
 });
 
@@ -123,8 +157,8 @@ stories.post('/admin/stories/:id/finish', bodyLimit({ maxSize: 1024 * 1024 }), a
   if (!parts.success || parts.data.length !== Math.ceil(file.size / chunkSize) ||
       parts.data.some((part, index) => part.partNumber !== index + 1)) return c.json({ error: 'Faltam partes do arquivo.' }, 400);
   // Uma repetição após falha no D1 pode encontrar o objeto já concluído no R2.
-  const object = await c.env.MEDIA.head(key(file.id)) ??
-    await c.env.MEDIA.resumeMultipartUpload(key(file.id), file.upload_id).complete(parts.data);
+  const object = await c.env.MEDIA.head(key(file)) ??
+    await c.env.MEDIA.resumeMultipartUpload(key(file), file.upload_id).complete(parts.data);
   if (object.size !== file.size) return c.json({ error: 'Tamanho final incorreto.' }, 409);
   const saved = await c.env.DB.prepare("UPDATE story_files SET status='ready',upload_id=NULL WHERE id=? AND status='pending'").bind(file.id).run();
   if (!saved.meta.changes && (await item(c.env,file.id))?.status !== 'ready') return c.json({ error: 'Envio removido.' }, 409);
@@ -139,12 +173,12 @@ stories.delete('/admin/stories/:id', async c => {
   const file = await item(c.env, id);
   if (file?.status === 'deleting') {
     if (file.upload_id) {
-      try { await c.env.MEDIA.resumeMultipartUpload(key(id), file.upload_id).abort(); }
+      try { await c.env.MEDIA.resumeMultipartUpload(key(file), file.upload_id).abort(); }
       catch (error) {
         if (!/NoSuchUpload|does not exist|10024/i.test(String(error))) throw error;
       }
     }
-    await c.env.MEDIA.delete(key(id));
+    await c.env.MEDIA.delete(key(file));
     await c.env.DB.prepare('DELETE FROM story_files WHERE id=?').bind(id).run();
   }
   return c.json({ removed: true });
@@ -163,7 +197,7 @@ stories.get('/stories/:id/media', async c => {
   headers.set('ETag', etag);
   if (!range && c.req.header('If-None-Match') === etag) return new Response(null, { status: 304, headers });
   if (preview) {
-    const prefix = await c.env.MEDIA.get(key(file.id), { range: { offset: 0, length: 128 * 1024 } });
+    const prefix = await c.env.MEDIA.get(key(file), { range: { offset: 0, length: 128 * 1024 } });
     if (!prefix) return c.notFound();
     const thumbnail = jpegPreview(await prefix.arrayBuffer());
     if (thumbnail) {
@@ -187,7 +221,7 @@ stories.get('/stories/:id/media', async c => {
     headers.set('Content-Range', `bytes ${start}-${end}/${file.size}`);
   }
   const length = end - start + 1;
-  const object = await c.env.MEDIA.get(key(file.id), range ? { range: { offset: start, length } } : {});
+  const object = await c.env.MEDIA.get(key(file), range ? { range: { offset: start, length } } : {});
   if (!object) return c.notFound();
   headers.set('Content-Length', String(length));
   return new Response(object.body, { status: range ? 206 : 200, headers });

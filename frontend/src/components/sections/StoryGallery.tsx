@@ -12,6 +12,7 @@ export interface StoryFile {
   status: 'pending' | 'ready' | 'deleting';
   author?: string | null;
   recorded_on?: string | null;
+  cultural_year?: number | null;
 }
 
 function mediaLabel(file: StoryFile) {

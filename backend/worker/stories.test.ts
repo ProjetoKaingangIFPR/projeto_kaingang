@@ -14,12 +14,47 @@ test('reserva concorrente, alteração da cota e publicação multipart no D1 e 
   await env.DB.batch(migration.split(';').filter(sql => sql.trim()).map(sql => env.DB.prepare(sql)));
   const metadataMigration = await readFile(new URL('../migrations/0004_story_metadata.sql', import.meta.url), 'utf8');
   await env.DB.batch(metadataMigration.split(';').filter(sql => sql.trim()).map(sql => env.DB.prepare(sql)));
+  const cultureMigration = await readFile(new URL('../migrations/0005_cultural_weeks.sql', import.meta.url), 'utf8');
+  await env.DB.batch(cultureMigration.split(';').filter(sql => sql.trim()).map(sql => env.DB.prepare(sql)));
+  const keysMigration = await readFile(new URL('../migrations/0006_media_object_keys.sql', import.meta.url), 'utf8');
+  await env.DB.batch(keysMigration.split(';').filter(sql => sql.trim()).map(sql => env.DB.prepare(sql)));
   const request = (path: string, method = 'GET', data?: unknown) => stories.request(path, {
     method, body: data === undefined ? undefined : JSON.stringify(data),
     headers: { 'Content-Type': 'application/json' },
   }, env);
   const admin = '/admin/stories';
   assert.equal((await app.request('/api' + admin, {}, env)).status, 401);
+  await env.DB.prepare("INSERT INTO story_files(id,collection,title,position,name,type,size,created,status) VALUES('legacy','legacy','Legado',0,'audio.mp3','audio/mpeg',1,0,'ready')").run();
+  await env.MEDIA.put('stories/legacy', new Uint8Array([42]));
+  const legacy = await request('/stories/legacy/media');
+  assert.equal(legacy.status, 200);
+  assert.deepEqual(new Uint8Array(await legacy.arrayBuffer()), new Uint8Array([42]));
+  await request(admin + '/legacy', 'DELETE');
+  const culture = await request('/admin/cultural-weeks', 'POST', { title: 'Semana cultural', year: 2024,
+    files: [{ name: 'foto.jpg', type: 'image/jpeg', size: 1 }] });
+  assert.equal(culture.status, 201);
+  const cultureId = (await culture.json() as { ids: string[] }).ids[0];
+  const cultureKey = await env.DB.prepare('SELECT object_key FROM story_files WHERE id=?').bind(cultureId).first<string>('object_key');
+  assert.match(cultureKey!, /^memorias-escola\/2024\//);
+  await env.DB.prepare("UPDATE story_files SET status='ready' WHERE id=?").bind(cultureId).run();
+  assert.deepEqual(await (await request('/stories')).json(), []);
+  const albums = await (await request('/cultural-weeks')).json() as { year: number; photos: { src: string; type: string }[] }[];
+  assert.equal(albums[0].year, 2024);
+  assert.equal(albums[0].photos[0].src, '/api/stories/' + cultureId + '/media');
+  const cultures = await (await request('/admin/cultural-weeks')).json() as { files: { id: string }[] };
+  assert.equal(cultures.files[0].id, cultureId);
+  assert.equal((await request(admin, 'POST', { title: 'Inválido', kind: 'culture', files: [{ name: 'audio.mp3', type: 'audio/mpeg', size: 1 }] })).status, 400);
+  const mixed = await request(admin, 'POST', { title: 'Outros registros', kind: 'culture', year: 2024, files: [
+    { name: 'audio.mp3', type: 'audio/mpeg', size: 1 }, { name: 'video.mp4', type: 'video/mp4', size: 1 },
+  ] });
+  assert.equal(mixed.status, 201);
+  const mixedIds = (await mixed.json() as { ids: string[] }).ids;
+  for (const id of mixedIds) await env.DB.prepare("UPDATE story_files SET status='ready' WHERE id=?").bind(id).run();
+  const combined = await (await request('/cultural-weeks')).json() as typeof albums;
+  assert.deepEqual(combined[0].photos.map(file => file.type).sort(), ['audio/mpeg', 'image/jpeg', 'video/mp4']);
+  assert.deepEqual(await (await request('/stories')).json(), []);
+  for (const id of mixedIds) await request(admin + '/' + id, 'DELETE');
+  await request(admin + '/' + cultureId, 'DELETE');
   const dated = await request(admin, 'POST', { title: 'Registros', files: [
     { name: 'sem-data.mp3', type: 'audio/mpeg', size: 1 },
     { name: 'recente.mp3', type: 'audio/mpeg', size: 1, recorded_on: '2024-01-01' },
@@ -46,6 +81,8 @@ test('reserva concorrente, alteração da cota e publicação multipart no D1 e 
   const media = { title: 'Memória', files: [{ name: 'fala.mp4', type: 'video/mp4', size: partSize + 2 }] };
   const created = await request(admin, 'POST', media);
   const { ids: [id] } = await created.json() as { ids: string[] };
+  const storedKey = await env.DB.prepare('SELECT object_key FROM story_files WHERE id=?').bind(id).first<string>('object_key');
+  assert.match(storedKey!, /^historias\//);
   const collection = await env.DB.prepare('SELECT collection FROM story_files WHERE id=?').bind(id).first<string>('collection');
   assert.equal((await request('/admin/story-collections/' + collection, 'PATCH', { title: ' ' })).status, 400);
   assert.equal((await request('/admin/story-collections/' + collection, 'PATCH', { title: ' Novo título ' })).status, 200);
@@ -80,7 +117,7 @@ test('reserva concorrente, alteração da cota e publicação multipart no D1 e 
   assert.equal(cached.headers.get('Cache-Control'), 'private, no-cache');
   assert.equal((await request(path, 'DELETE')).status, 200);
   assert.equal((await revalidate()).status, 404);
-  assert.equal(await env.MEDIA.head('stories/' + id), null);
+  assert.equal(await env.MEDIA.head(storedKey!), null);
   assert.deepEqual(await (await request('/stories')).json(), []);
 });
 

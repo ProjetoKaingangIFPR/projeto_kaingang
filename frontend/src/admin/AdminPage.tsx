@@ -1,5 +1,5 @@
 import React, { useEffect, useState } from "react";
-import { ArrowLeft, BookOpen, LockKeyhole, MapPinned } from "lucide-react";
+import { ArrowLeft, BookOpen, Images, LockKeyhole, MapPinned } from "lucide-react";
 import VirtualVisitsPage from "../VirtualVisitsPage";
 import StoryManager from "./StoryManager";
 import ChangePasswordModal from "./ChangePasswordModal";
@@ -15,7 +15,7 @@ export default function AdminPage() {
   const [error, setError] = useState("");
   const [busy, setBusy] = useState(false);
   const [notice, setNotice] = useState("");
-  const [section, setSection] = useState<"home" | "visits" | "stories">("home");
+  const [section, setSection] = useState<"home" | "visits" | "stories" | "culture">("home");
   const [changingPassword, setChangingPassword] = useState(false);
   const checkSession = () => {
     setError("");
@@ -71,7 +71,8 @@ export default function AdminPage() {
     if (section === "visits") {
       return <VirtualVisitsPage administrative onBackToAdmin={goHome} onSessionEnd={endSession} />;
     }
-    if (section === "stories") return <StoryManager onClose={goHome} />;
+    if (section === "stories") return <StoryManager key="stories" onClose={goHome} />;
+    if (section === "culture") return <StoryManager key="culture" culturalWeeks onClose={goHome} />;
 
     return (
       <main className="min-h-screen bg-neutral-950 px-5 py-8 text-white sm:px-8 sm:py-12">
@@ -84,6 +85,11 @@ export default function AdminPage() {
           {error && <p role="alert" className="mb-4 text-red-300">{error}</p>}
           <h1 className="mb-7 text-4xl font-semibold sm:text-5xl">Painel administrativo</h1>
           <div className="grid gap-4 sm:grid-cols-2">
+            <button onClick={() => setSection("culture")} className="rounded-lg border border-white/15 bg-neutral-900 p-6 text-left cursor-pointer transition-colors hover:border-red-400/70 hover:bg-neutral-800 active:bg-neutral-700 focus-visible:outline-2 focus-visible:outline-offset-4">
+              <Images aria-hidden="true" className="mb-4 text-red-300"/>
+              <span className="font-display block text-2xl font-semibold">Memórias da Escola</span>
+              <span className="mt-2 block text-neutral-300">Gerenciar fotos, vídeos e áudios das semanas culturais por ano.</span>
+            </button>
             <button onClick={() => setSection("visits")} className="rounded-lg border border-white/15 bg-neutral-900 p-6 text-left cursor-pointer transition-colors hover:border-red-400/70 hover:bg-neutral-800 active:bg-neutral-700 focus-visible:outline-2 focus-visible:outline-offset-4">
               <MapPinned aria-hidden="true" className="mb-4 text-red-300" />
               <span className="font-display block text-2xl font-semibold">Visitas virtuais</span>
