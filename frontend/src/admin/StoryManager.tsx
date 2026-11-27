@@ -4,7 +4,7 @@ import type { StoryFile } from '../components/sections/StoryGallery';
 import { api, ApiError } from './api';
 import { galleryImageUrl, MediaTile, type MediaFile } from './MediaTile';
 import MediaPreview from './MediaPreview';
-import { uploadParts, type UploadedPart } from './uploadParts';
+import { uploadFile, type UploadedPart } from './uploadParts';
 import { mediaFormats as formats, mediaAccept, normalizeMedia } from './mediaFormats';
 import RecordMetadataEditor, { type RecordMetadata } from './RecordMetadataEditor';
 
@@ -153,19 +153,11 @@ export default function StoryManager({ onClose, culturalWeeks = false }: { onClo
       if (cancelRequested.current) break;
       setCurrentFile(file.name);
       const path = endpoint + '/' + ids[i];
-      const { published } = await api<{ published?: boolean }>(path + '/start', { method: 'POST' });
-      if (!published) {
-        if (receipts.current?.id !== ids[i]) receipts.current = { id: ids[i], parts: new Map() };
-        const parts = await uploadParts(file, path, chunkSize, receipts.current.parts, transfer.signal, size => {
-          done += size;
-          setSent(done);
-        });
-        if (cancelRequested.current) break;
-        await api(path + '/finish', { method: 'POST', body: JSON.stringify(parts) });
-      } else {
-        done += file.size;
+      if (receipts.current?.id !== ids[i]) receipts.current = { id: ids[i], parts: new Map() };
+      await uploadFile(file, path, chunkSize, receipts.current.parts, transfer.signal, size => {
+        done += size;
         setSent(done);
-      }
+      });
       setFiles(current => current.slice(1));
       receipts.current = null;
       completed++;
