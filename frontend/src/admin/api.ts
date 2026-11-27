@@ -9,6 +9,6 @@ export async function api<T>(url: string, options: RequestInit = {}): Promise<T>
     headers: { 'Content-Type': 'application/json', ...options.headers },
   });
   const data = await response.json().catch(() => null) as {error?: string} | null;
-  if (!response.ok) throw new ApiError(data?.error || 'Não foi possível acessar o servidor.', response.status);
+  if (!response.ok) throw new ApiError(data?.error || `Não foi possível acessar o servidor (HTTP ${response.status}).`, response.status);
   return data as T;
 }

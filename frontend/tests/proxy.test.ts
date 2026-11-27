@@ -48,3 +48,27 @@ test('Pages encaminha corpo, cookie e origem e preserva Set-Cookie', async () =>
   } finally { globalThis.fetch = original; }
 });
 
+test('Pages rejeita partes acima do limite antes de ler o corpo ou chamar a API', async t => {
+  const fetch = t.mock.method(globalThis, 'fetch', async () => { throw new Error('Não deveria encaminhar'); });
+  const response = await onRequest({
+    request: new Request('https://site.example.com/api/admin/stories/test/parts/1', {
+      method: 'PUT', headers: { 'Content-Length': String(8 * 1024 * 1024 + 1) }, body: new Uint8Array([1]),
+    }), env: { API_URL: 'https://api.example.com' },
+  } as Parameters<typeof onRequest>[0]);
+  assert.equal(response.status, 413);
+  assert.equal(fetch.mock.callCount(), 0);
+});
+
+test('Pages identifica rejeições externas também ao iniciar e finalizar um arquivo', async t => {
+  t.mock.method(globalThis, 'fetch', async () => new Response('upstream error', { status: 502, headers: { 'CF-Ray': 'test-ray' } }));
+  for (const stage of ['start', 'finish']) {
+    const response = await onRequest({
+      request: new Request('https://site.example.com/api/admin/stories/test/' + stage, { method: 'POST' }),
+      env: { API_URL: 'https://api.example.com' },
+    } as Parameters<typeof onRequest>[0]);
+    assert.equal(response.status, 502);
+    assert.equal(response.headers.get('X-Upload-Error-Source'), 'upstream');
+    assert.deepEqual(await response.json(), { error: 'O servidor recusou a requisição (HTTP 502). Tente novamente.', requestId: 'test-ray' });
+  }
+});
+
