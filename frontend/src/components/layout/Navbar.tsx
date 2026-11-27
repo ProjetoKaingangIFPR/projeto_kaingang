@@ -53,7 +53,7 @@ export const Navbar: React.FC<NavbarProps> = ({
             <a
               href="#inicio"
               onClick={(e) => handleNavClick("inicio", e)}
-              className="flex items-center py-1 group focus:outline-none focus-visible:ring-2 focus-visible:ring-white cursor-pointer rounded-[3px]"
+              className="flex items-center py-1 group transition-opacity hover:opacity-80 focus:outline-none focus-visible:ring-2 focus-visible:ring-white cursor-pointer rounded-[3px]"
               aria-label="Página Inicial - Memórias da Escola"
             >
               <img
@@ -128,7 +128,7 @@ export const Navbar: React.FC<NavbarProps> = ({
                 <a
                   href="#inicio"
                   onClick={(e) => handleNavClick("inicio", e)}
-                  className="flex items-center py-1 cursor-pointer"
+                  className="flex items-center py-1 cursor-pointer transition-opacity hover:opacity-80 focus-visible:outline-2 focus-visible:outline-white rounded-[3px]"
                   aria-label="Página Inicial"
                 >
                   <img

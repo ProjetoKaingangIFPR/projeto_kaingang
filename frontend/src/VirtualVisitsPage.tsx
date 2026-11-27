@@ -273,7 +273,7 @@ function VirtualTourExperience({
                   return;
                 setChangingPassword(true);
               }}
-              className="px-3 py-2 text-sm text-white/80 hover:text-white disabled:opacity-50"
+              className="px-3 py-2 text-sm text-white/80 enabled:hover:text-white disabled:opacity-50"
             >
               Alterar senha
             </button>
@@ -318,7 +318,7 @@ function VirtualTourExperience({
                 href="/painel"
                 target="_blank"
                 rel="noreferrer"
-                className="underline text-sm"
+                className="underline text-sm transition-colors hover:text-red-300"
               >
                 Entrar novamente em outra aba e tentar salvar
               </a>
@@ -326,7 +326,7 @@ function VirtualTourExperience({
             <button
               onClick={saveTour}
               disabled={!dirty || saving || loading || Boolean(loadError)}
-              className="rounded-lg bg-[#8B0000] hover:bg-[#a30000] px-4 py-2 text-sm font-semibold disabled:opacity-50"
+              className="rounded-lg bg-[#8B0000] enabled:hover:bg-[#a30000] px-4 py-2 text-sm font-semibold disabled:opacity-50"
             >
               {saving ? "Salvando…" : "Salvar e publicar"}
             </button>
@@ -355,7 +355,7 @@ function VirtualTourExperience({
           >
             {loadError || "Carregando visita virtual…"}
             {loadError && (
-              <button onClick={loadTour} className="underline">
+              <button onClick={loadTour} className="underline transition-colors hover:text-white">
                 Tentar novamente
               </button>
             )}

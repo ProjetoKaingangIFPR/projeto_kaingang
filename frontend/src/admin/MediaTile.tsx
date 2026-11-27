@@ -64,7 +64,7 @@ export function MediaTile({ file, size, onOpen, onRemove, onOptimize, optimized,
       </span>}
     </button>
     <button type="button" disabled={!ready && !onSelect} onClick={() => onSelect ? onSelect(!selected) : onOpen()}
-      className="mt-2 block w-full truncate text-left text-sm font-medium" title={file.name}>{file.name}</button>
+      className="mt-2 block w-full truncate text-left text-sm font-medium transition-colors enabled:hover:text-rose-200 enabled:hover:underline" title={file.name}>{file.name}</button>
     <div className="flex flex-wrap items-center justify-between gap-1 text-sm text-stone-300">
       <span>{ready ? size : 'Envio pendente'}</span>
       {onRemove && <button type="button" aria-label={(file instanceof File ? 'Retirar ' : 'Remover ') + file.name}

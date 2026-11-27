@@ -28,7 +28,7 @@ export default function ChangePasswordModal({ onClose, onChanged }: { onClose: (
         <div><label htmlFor="new-password" className="mb-2 block text-sm">Nova senha</label><input id="new-password" type="password" autoComplete="new-password" required maxLength={1024} disabled={busy} value={newPassword} onChange={e => setNewPassword(e.target.value)} className={inputClass} /></div>
         <div><label htmlFor="confirm-password" className="mb-2 block text-sm">Confirmar nova senha</label><input id="confirm-password" type="password" autoComplete="new-password" required maxLength={1024} disabled={busy} value={confirmation} onChange={e => setConfirmation(e.target.value)} className={inputClass} /></div>
         {error && <p role="alert" className="text-sm text-red-300">{error}</p>}
-        <div className="flex justify-end gap-3"><button type="button" onClick={onClose} disabled={busy} className="rounded-lg px-4 py-2 disabled:opacity-50">Cancelar</button><button type="submit" disabled={busy} className="rounded-lg bg-[#8B0000] px-4 py-2 disabled:opacity-50">{busy ? 'Alterando…' : 'Alterar senha'}</button></div>
+        <div className="flex justify-end gap-3"><button type="button" onClick={onClose} disabled={busy} className="rounded-lg px-4 py-2 transition-colors enabled:hover:bg-white/10 disabled:opacity-50">Cancelar</button><button type="submit" disabled={busy} className="rounded-lg bg-[#8B0000] px-4 py-2 transition-colors enabled:hover:bg-[#a30000] disabled:opacity-50">{busy ? 'Alterando…' : 'Alterar senha'}</button></div>
       </form>
     </section>
   </div>;

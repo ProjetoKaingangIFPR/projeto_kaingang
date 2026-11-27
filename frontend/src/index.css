@@ -17,6 +17,20 @@ body {
 }
 
 @layer base {
+  button:enabled,
+  input:is([type="button"], [type="submit"], [type="reset"]):enabled,
+  a[href],
+  summary,
+  [role="button"]:not([aria-disabled="true"]) {
+    cursor: pointer;
+  }
+
+  button:disabled,
+  input:is([type="button"], [type="submit"], [type="reset"]):disabled,
+  [aria-disabled="true"] {
+    cursor: default;
+  }
+
   h1, h2, h3, h4, h5, h6, .font-display {
     font-family: 'Source Serif 4 Variable', Georgia, serif;
     font-optical-sizing: auto;

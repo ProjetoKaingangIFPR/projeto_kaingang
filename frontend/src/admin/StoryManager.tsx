@@ -356,7 +356,7 @@ export default function StoryManager({ onClose, culturalWeeks = false }: { onClo
                 className="mt-2 block w-full rounded border border-white/25 bg-neutral-950 p-3"/>
             </label>
             <div className="flex gap-3">
-              <button disabled={!newTitle.trim()} className="rounded bg-[#8B0000] px-4 py-2 hover:bg-[#a30000] disabled:opacity-40">Salvar título</button>
+              <button disabled={!newTitle.trim()} className="rounded bg-[#8B0000] px-4 py-2 enabled:hover:bg-[#a30000] disabled:opacity-40">Salvar título</button>
               <button type="button" onClick={() => setRenaming(false)} className="rounded border border-white/25 px-4 py-2 hover:bg-white/10">Cancelar</button>
             </div>
           </form> : <div className="mb-5 flex flex-wrap gap-3">

@@ -749,7 +749,7 @@ export const FloorPlanEditor: React.FC<FloorPlanEditorProps> = ({
             id="btn-toggle-grid-snap"
             onClick={() => setSnapToGrid(!snapToGrid)}
             title="Ativar/Desativar grade magnética"
-            className={`px-3 py-1.5 rounded-lg flex items-center gap-1.5 border transition-colors ${
+            className={`px-3 py-1.5 rounded-lg flex items-center gap-1.5 border transition-colors hover:bg-neutral-200 ${
               snapToGrid
                 ? 'bg-neutral-100 border-black text-black font-semibold'
                 : 'bg-white border-neutral-200 text-neutral-500'
@@ -763,7 +763,7 @@ export const FloorPlanEditor: React.FC<FloorPlanEditorProps> = ({
             id="btn-toggle-ortho"
             onClick={() => setOrthoMode(!orthoMode)}
             title="Travar ângulos ortogonais (90°)"
-            className={`px-3 py-1.5 rounded-lg flex items-center gap-1.5 border transition-colors ${
+            className={`px-3 py-1.5 rounded-lg flex items-center gap-1.5 border transition-colors hover:bg-neutral-200 ${
               orthoMode
                 ? 'bg-neutral-100 border-black text-black font-semibold'
                 : 'bg-white border-neutral-200 text-neutral-500'
@@ -787,7 +787,7 @@ export const FloorPlanEditor: React.FC<FloorPlanEditorProps> = ({
             onClick={handleUndo}
             disabled={floorPlan.walls.length === 0}
             title="Desfazer parede"
-            className="p-2 rounded-lg bg-white hover:bg-neutral-100 border border-neutral-200 text-neutral-600 disabled:opacity-30 transition-colors"
+            className="p-2 rounded-lg bg-white enabled:hover:bg-neutral-100 border border-neutral-200 text-neutral-600 disabled:opacity-30 transition-colors"
           >
             <RotateCcw className="w-3.5 h-3.5" />
           </button>

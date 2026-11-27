@@ -439,7 +439,7 @@ export const PointConfigModal: React.FC<PointConfigModalProps> = ({
               id="btn-save-point-config"
               type="button"
               onClick={handleSave}
-              className="px-5 py-2 text-xs font-bold text-white bg-black hover:bg-neutral-800 rounded-lg shadow-sm transition-all flex items-center gap-1.5 uppercase tracking-wider"
+              className="px-5 py-2 text-xs font-bold text-white bg-black enabled:hover:bg-neutral-800 rounded-lg shadow-sm transition-all flex items-center gap-1.5 uppercase tracking-wider"
             >
               <Check className="w-4 h-4" />
               <span>Salvar Ambiente</span>

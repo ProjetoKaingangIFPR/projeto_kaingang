@@ -79,8 +79,8 @@ export default function AdminPage() {
         <div className="mx-auto max-w-5xl">
           <nav aria-label="Conta administrativa" className="mb-12 flex flex-wrap items-center gap-x-6 gap-y-3 text-sm">
             <a href="/" className="mr-auto inline-flex items-center gap-2 underline underline-offset-4 transition-colors hover:text-red-300"><ArrowLeft size={16} aria-hidden="true" /> Voltar ao site</a>
-            <button disabled={busy} onClick={() => setChangingPassword(true)} className="underline underline-offset-4 transition-colors hover:text-red-300 enabled:cursor-pointer disabled:opacity-50">Alterar senha</button>
-            <button disabled={busy} onClick={logout} className="underline underline-offset-4 transition-colors hover:text-red-300 enabled:cursor-pointer disabled:opacity-50">{busy ? "Saindo…" : "Sair"}</button>
+            <button disabled={busy} onClick={() => setChangingPassword(true)} className="underline underline-offset-4 transition-colors enabled:hover:text-red-300 enabled:cursor-pointer disabled:opacity-50">Alterar senha</button>
+            <button disabled={busy} onClick={logout} className="underline underline-offset-4 transition-colors enabled:hover:text-red-300 enabled:cursor-pointer disabled:opacity-50">{busy ? "Saindo…" : "Sair"}</button>
           </nav>
           {error && <p role="alert" className="mb-4 text-red-300">{error}</p>}
           <h1 className="mb-7 text-4xl font-semibold sm:text-5xl">Painel administrativo</h1>
@@ -132,7 +132,7 @@ export default function AdminPage() {
             <div role="status" className="text-sm text-white/70">
               {error || "Verificando acesso…"}
               {error && (
-                <button onClick={checkSession} className="block underline mt-3">
+                <button onClick={checkSession} className="block underline mt-3 transition-colors hover:text-red-300">
                   Tentar novamente
                 </button>
               )}
@@ -185,7 +185,7 @@ export default function AdminPage() {
               <button
                 type="submit"
                 disabled={busy || !session.configured}
-                className="w-full flex justify-center items-center gap-2 rounded-lg bg-[#8B0000] hover:bg-[#a30000] px-4 py-3 font-semibold disabled:opacity-50"
+                className="w-full flex justify-center items-center gap-2 rounded-lg bg-[#8B0000] enabled:hover:bg-[#a30000] px-4 py-3 font-semibold disabled:opacity-50"
               >
                 <MapPinned size={18} />
                 {busy ? "Entrando…" : "Entrar no painel"}

@@ -35,7 +35,7 @@ export default function RecordMetadataEditor({ value, onChange, onSave, disabled
         className="mt-1 block w-full min-w-0 rounded border border-white/20 bg-neutral-950 p-2"/>
       <span className="mt-1 block text-xs text-white/50">Dia/mês/ano, por exemplo 25/11/2026.</span>
     </label>
-    {onSave && <button type="button" disabled={busy || disabled} className="rounded border border-white/25 px-3 py-2 hover:bg-white/10 disabled:opacity-40" onClick={async () => {
+    {onSave && <button type="button" disabled={busy || disabled} className="rounded border border-white/25 px-3 py-2 enabled:hover:bg-white/10 disabled:opacity-40" onClick={async () => {
       if (!dateInput.current?.reportValidity()) return;
       setBusy(true); setFeedback('');
       try { await onSave(draft); setFeedback('Dados salvos.'); }
