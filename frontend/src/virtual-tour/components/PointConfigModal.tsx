@@ -1,4 +1,5 @@
 import { api } from '../../admin/api';
+import { normalizeMedia } from '../../admin/mediaFormats';
 import React, { useState } from 'react';
 import { Point360, ArtworkHotspot } from '../types';
 import { PRESET_PANOS } from '../utils/proceduralPano';
@@ -67,7 +68,9 @@ export const PointConfigModal: React.FC<PointConfigModalProps> = ({
     setUploading(true);
     setUploadError('');
     try {
-      const result = await api<{url: string}>('/api/admin/media', {method: 'POST', headers: {'Content-Type': file.type}, body: file});
+      const { optimizeImage } = await import('../../admin/optimizeImage');
+      const prepared = await optimizeImage(normalizeMedia(file));
+      const result = await api<{url: string}>('/api/admin/media', {method: 'POST', headers: {'Content-Type': prepared.type}, body: prepared});
       setPanoramaUrl(result.url);
       setActiveTab('upload');
     } catch (error) { setUploadError(error instanceof Error ? error.message : 'Falha no envio.'); }

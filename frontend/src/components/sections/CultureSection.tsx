@@ -3,7 +3,7 @@ import { motion } from "framer-motion";
 import { useImages } from "../../context/ImageContext";
 import { FRAME_TEXTS } from "../../data/content";
 import { ContentMode } from "../../types";
-import { ShieldAlert, Mail, ArrowRight } from "lucide-react";
+import { School, Images, ArrowRight } from "lucide-react";
 
 interface CultureSectionProps {
   mode: ContentMode;
@@ -76,21 +76,21 @@ export const CultureSection: React.FC<CultureSectionProps> = ({
               >
                 <button
                   type="button"
-                  onClick={() => onSelectNav("manual")}
+                  onClick={() => onSelectNav("escola")}
                   className="group inline-flex items-center justify-center gap-2 px-5 sm:px-6 py-2.5 sm:py-3 bg-[#8B0000] hover:bg-[#a30000] active:scale-95 text-white text-xs sm:text-sm 2xl:text-base font-bold tracking-wide shadow-md hover:shadow-lg transition-all cursor-pointer rounded-[3px]"
                 >
-                  <ShieldAlert className="w-4 h-4 text-white/90" />
-                  <span>Manual de Conduta</span>
+                  <School className="w-4 h-4 text-white/90" />
+                  <span>Conhecer a escola</span>
                   <ArrowRight className="w-3.5 h-3.5 group-hover:translate-x-1 transition-transform" />
                 </button>
 
                 <button
                   type="button"
-                  onClick={() => onSelectNav("fale-conosco")}
+                  onClick={() => onSelectNav("eventos-escola")}
                   className="inline-flex items-center justify-center gap-2 px-5 sm:px-6 py-2.5 sm:py-3 bg-neutral-100 hover:bg-neutral-200 active:scale-95 text-neutral-800 text-xs sm:text-sm 2xl:text-base font-semibold tracking-wide border border-neutral-300/80 transition-all cursor-pointer rounded-[3px]"
                 >
-                  <Mail className="w-4 h-4 text-neutral-600" />
-                  <span>Fale Conosco</span>
+                  <Images className="w-4 h-4 text-neutral-600" />
+                  <span>Ver os eventos</span>
                 </button>
               </motion.div>
             )}

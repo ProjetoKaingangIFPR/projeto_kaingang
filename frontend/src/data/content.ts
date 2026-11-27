@@ -48,17 +48,17 @@ export const NAVIGATION_ITEMS: NavItem[] = [
 
 export const FRAME_TEXTS = {
   section1: {
-    title: "teste enim",
+    title: "Nossa história, nosso território",
     paragraph:
-      "Lorem ipsum dolor sit amet asda consectetur. Id dictumst nisi lacus urna pellentesque elit suspendisse. Sed egestas sollicitudin praesent a in. Neque turpis at arcu mauris purus sed nec tortor. Quisque quisque auctor feugiat maecenas elit dictum orci aliquam.",
+      "Nossa memória vive nas histórias, nos saberes e na relação com o território. Este espaço reúne registros da Escola Segsõ Tánh Sá e da comunidade Kaingang para aproximar gerações e compartilhar conhecimentos. Conheça nossas histórias e percorra os espaços da escola e da aldeia pela visita virtual.",
     culturalTitle: "Saberes da Terra e Ancestralidade",
     culturalParagraph:
       "O cultivo das espécies nativas e o aprendizado prático ao ar livre formam a base da nossa educação comunitária. Com os anciãos e professoras indígenas, os jovens aprendem a reconhecer sementes, cuidar da botânica sagrada e perpetuar a agroecologia tradicional para as futuras gerações.",
   },
   section2: {
-    title: "teste enim",
+    title: "Memórias que seguimos construindo",
     paragraph:
-      "Lorem ipsum dolor sit amet asda consectetur. Id dictumst nisi lacus urna pellentesque elit suspendisse. Sed egestas sollicitudin praesent a in. Neque turpis at arcu mauris purus sed nec tortor. Quisque quisque auctor feugiat maecenas elit dictum orci aliquam.",
+      "Cada encontro, atividade e celebração faz parte da história da nossa escola. Fotografias, vídeos e relatos ajudam a lembrar quem veio antes e a registrar o que vivemos hoje. Ao reunir essas memórias, queremos que as próximas gerações conheçam os caminhos da comunidade e também contem suas próprias histórias.",
     culturalTitle: "Cultura Viva e Cantos Tradicionais",
     culturalParagraph:
       "A transmissão oral, os grafismos corporais com urucum e jenipapo, os cânticos cerimoniais e as danças sagradas celebram a identidade viva de nosso povo. Na escola da comunidade, cada celebração fortalece a autonomia, a memória e o orgulho de nossa juventude.",

@@ -40,6 +40,18 @@ test('upload autenticado grava no R2 e a URL pública devolve os mesmos bytes', 
   assert.equal(image.status, 200);
   assert.equal(image.headers.get('Content-Type'), 'image/jpeg');
   assert.deepEqual(new Uint8Array(await image.arrayBuffer()), bytes);
+  assert.equal(image.headers.get('Cache-Control'), 'private, no-cache');
+  const previousEtag = image.headers.get('ETag')!;
+  assert.equal((await app.fetch(new Request(`https://example.com${url}`, { headers: { 'If-None-Match': previousEtag } }), env)).status, 304);
+  const id = url.split('/').pop()!;
+  const replacement = new Uint8Array([137, 80, 78, 71]);
+  objects.set('optimized/' + id, replacement);
+  rows.set(id, { object_key: 'optimized/' + id, content_type: 'image/png' });
+  const changed = await app.fetch(new Request(`https://example.com${url}`, { headers: { 'If-None-Match': previousEtag } }), env);
+  assert.equal(changed.status, 200);
+  assert.notEqual(changed.headers.get('ETag'), previousEtag);
+  assert.equal(changed.headers.get('Content-Type'), 'image/png');
+  assert.deepEqual(new Uint8Array(await changed.arrayBuffer()), replacement);
   objects.clear();
   assert.equal((await app.fetch(new Request(`https://example.com${url}`), env)).status, 404);
   const unauthenticated = new Request('https://example.com/api/admin/media', {

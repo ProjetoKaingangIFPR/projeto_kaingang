@@ -90,20 +90,22 @@ export default function StoryManager({ onClose, culturalWeeks = false }: { onClo
   const available = (storage?.capacity ?? 0) - occupied;
   const exceeds = !reservation && selected > available;
   const invalid = files.some(file => !file.size || !formats.includes(file.type));
-  const toPrepare = reservation ? [] : files.filter(file => file.type.startsWith('video/') && !originals.current.has(file));
+  const toPrepare = reservation ? [] : files.filter(file =>
+    (file.type.startsWith('video/') || ['image/jpeg', 'image/png'].includes(file.type)) && !originals.current.has(file));
 
-  async function prepareVideos() {
+  async function prepareMedia() {
     const controller = new AbortController();
     preparationController.current = controller;
     const prepared = [...files];
     try {
       if (toPrepare.length) {
-        const { optimizeVideo } = await import('./optimizeVideo');
         for (const [index, file] of toPrepare.entries()) {
           controller.signal.throwIfAborted();
           setPreparing({ name: file.name, index: index + 1, total: toPrepare.length, percent: 0 });
           try {
-            const candidate = await optimizeVideo(file, controller.signal, percent =>
+            const optimize = file.type.startsWith('video/')
+              ? (await import('./optimizeVideo')).optimizeVideo : (await import('./optimizeImage')).optimizeImage;
+            const candidate = await optimize(file, controller.signal, percent =>
               setPreparing({ name: file.name, index: index + 1, total: toPrepare.length, percent }));
             originals.current.set(candidate, file);
             prepared[prepared.indexOf(file)] = candidate;
@@ -280,7 +282,7 @@ export default function StoryManager({ onClose, culturalWeeks = false }: { onClo
     {message && <p role="status" className="mb-5 rounded-lg border border-green-400/30 bg-green-950 p-3">{message}</p>}
     {error && <p role="alert" className="mb-5 rounded-lg border border-amber-400/30 bg-amber-950 p-3 text-amber-200">{error}</p>}
     {preparing && <section role="status" className="sticky top-0 z-20 mb-5 space-y-3 rounded-xl border border-rose-300/40 bg-neutral-900 p-4 shadow-xl">
-      <div className="flex flex-wrap items-center justify-between gap-3"><strong>Otimizando vídeo {preparing.index} de {preparing.total}</strong>
+      <div className="flex flex-wrap items-center justify-between gap-3"><strong>Otimizando arquivo {preparing.index} de {preparing.total}</strong>
         <button type="button" onClick={() => preparationController.current?.abort()} className="rounded border border-white/30 px-3 py-2 hover:bg-white/10">Cancelar otimização</button></div>
       <p className="break-all text-sm">{preparing.name} · {preparing.percent}%</p>
       <progress aria-label="Progresso da otimização" max={100} value={preparing.percent} className="block w-full accent-rose-400"/>
@@ -308,7 +310,7 @@ export default function StoryManager({ onClose, culturalWeeks = false }: { onClo
           </form>
         </details>
       </section> : <button className="order-last rounded-lg border border-white/20 p-4 hover:bg-neutral-800 lg:col-start-2 lg:row-start-1" onClick={() => perform(refresh)}>Carregar armazenamento</button>}
-      {editing ? <form className="min-w-0 space-y-5 rounded-xl bg-[#292523] p-5 sm:p-8 lg:col-start-1 lg:row-start-1" onSubmit={event => { event.preventDefault(); void perform(prepareVideos); }}>
+      {editing ? <form className="min-w-0 space-y-5 rounded-xl bg-[#292523] p-5 sm:p-8 lg:col-start-1 lg:row-start-1" onSubmit={event => { event.preventDefault(); void perform(prepareMedia); }}>
         <button type="button" onClick={() => setEditing(false)} className="inline-flex items-center gap-2 text-sm text-stone-300 hover:text-white"><ArrowLeft size={16}/> Acervo</button>
         <h2 className="text-3xl">{culturalWeeks ? 'Novo álbum' : 'Nova história'}</h2>
         {culturalWeeks && <label className="block">Ano do evento
@@ -332,7 +334,7 @@ export default function StoryManager({ onClose, culturalWeeks = false }: { onClo
             </MediaTile>)}
         </ul>}
         {!!files.length && !uploadTotal && <p className="rounded-lg bg-neutral-800 p-3">{files.length} {files.length === 1 ? 'arquivo selecionado' : 'arquivos selecionados'} · {bytes(selected)}{storage && !exceeds && ' · Após o envio, ' + bytes(reservation ? available : available - selected) + ' disponíveis.'}</p>}
-        {!!toPrepare.length && <p className="text-sm text-stone-300">Ao enviar, os vídeos serão otimizados automaticamente neste dispositivo. Mantenha esta aba aberta até concluir.</p>}
+        {!!toPrepare.length && <p className="text-sm text-stone-300">Ao enviar, fotos JPEG e PNG e vídeos serão otimizados automaticamente neste dispositivo. As fotos podem ser salvas como PNG ou JPEG, mantendo a resolução e a transparência. Mantenha esta aba aberta até concluir.</p>}
         {storage && exceeds && !uploadTotal && <p role="alert" className="text-amber-300">A seleção excede o saldo em {bytes(selected - available)}. Retire arquivos ou ajuste a cota.</p>}
         {invalid && <p role="alert">Retire arquivos vazios ou incompatíveis. Aceitamos imagens JPEG, PNG, WebP, GIF, AVIF, BMP, TIFF, HEIC e HEIF; vídeos MP4, M4V, MOV, WebM e MKV; áudios MP3, M4A, WAV, OGG, Opus, AAC, FLAC e WebM.</p>}
         <button disabled={!storage || !files.length || !title.trim() || invalid || (exceeds && !toPrepare.length)}

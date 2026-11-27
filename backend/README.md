@@ -61,6 +61,64 @@ Pelo terminal: npm run deploy publica somente esta API. GET /api/admin/session r
 
 Tour e sessões ficam no D1. Imagens ficam em tours/ no R2, disponíveis por /api/media/:id. Uploads aceitam JPEG, PNG e WebP até 20 MB; vídeos ainda não estão implementados. A planta aceita até 1 MB sem imagens. Arquivos descartados no editor permanecem no bucket.
 
+## Otimização de arquivos já enviados
+
+Os scripts de manutenção usam os bindings remotos do R2/D1 autenticados pelo
+Wrangler. Execute o inventário antes de qualquer modificação:
+
+```bash
+node scripts/optimize-stored-media.mjs inventory
+node scripts/optimize-stored-media.mjs download
+```
+
+O diretório `backend/build/stored-media/`, ignorado pelo Git, guarda o inventário,
+os arquivos originais com SHA-256, os candidatos e o diário das alterações.
+Preserve a pasta inteira para recuperação. Arquive uma execução antes de iniciar
+outro inventário; `apply` e `verify` retomam o plano existente.
+
+Em `frontend/`, execute `node scripts/prepare-stored-media.mjs`. Esse processo
+requer Brave no Windows e usa o otimizador real em um navegador sem janela. Para
+candidatos menores em pelo menos 5%, verifica resolução, transparência e SSIM de
+luminância. Os vídeos também precisam manter a quantidade de quadros e faixas de
+áudio e a duração (tolerância de 50 ms). O limite conservador é média SSIM >= 0,98
+e mínimo >= 0,975 em 5 a 15 quadros distribuídos no vídeo; fotos exigem >= 0,99.
+Uma comparação amostral não garante qualidade perceptual do vídeo inteiro.
+
+Uma segunda etapa tenta JPEG sem perdas, preservando os metadados. Instale a
+ferramenta isoladamente, sem alterar as dependências da aplicação:
+
+```bash
+npm install --prefix build/stored-media/tools --no-save --package-lock=false --no-audit --no-fund jpegtran-bin@7.0.0
+node scripts/prepare-lossless-images.mjs
+```
+
+Essa etapa usa o Sharp incluído na instalação atual do Wrangler para comparar
+todos os pixels decodificados, EXIF, ICC, XMP, IPTC e orientação. JPEGs com
+múltiplas imagens/gain maps não são reescritos. O plano prefere o candidato JPEG
+sem perdas quando disponível.
+
+```bash
+node scripts/optimize-stored-media.mjs plan
+node scripts/optimize-stored-media.mjs apply --limit 1
+node scripts/optimize-stored-media.mjs verify --limit 1 --api-origin https://SEU-WORKER.workers.dev
+node scripts/optimize-stored-media.mjs apply
+node scripts/optimize-stored-media.mjs verify --api-origin https://SEU-WORKER.workers.dev
+```
+
+`plan` apenas escreve o plano local. `apply` altera produção: valida os hashes do
+backup e candidato, envia uma nova chave R2 por multipart, lê os bytes enviados
+para conferir o SHA-256 e troca a referência no D1 somente se a versão anterior
+continuar igual. Os IDs, coleções, ordem, autor e data permanecem. Só então remove
+o objeto antigo, desde que nenhuma outra linha o referencie. Falhas deixam o
+original ou o backup disponíveis, e `applied.json` permite retomar a operação.
+O plano e o inventário contêm as chaves e os metadados necessários para restaurar
+os originais; a restauração não é automática.
+
+Antes de substituir objetos, publique a versão do backend com ETags que mudam
+quando os arquivos são substituídos. Não use ETag baseado apenas no ID nem novas
+respostas `immutable` para URLs cujo conteúdo pode mudar. A verificação opcional
+da API testa a primeira imagem do acervo e as imagens do tour, inclusive HTTP 304.
+
 ## Verificação
 
 ```bash

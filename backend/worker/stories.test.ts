@@ -29,6 +29,14 @@ test('reserva concorrente, alteração da cota e publicação multipart no D1 e 
   const legacy = await request('/stories/legacy/media');
   assert.equal(legacy.status, 200);
   assert.deepEqual(new Uint8Array(await legacy.arrayBuffer()), new Uint8Array([42]));
+  const legacyEtag = legacy.headers.get('ETag')!;
+  assert.equal((await stories.request('/stories/legacy/media', { headers: { 'If-None-Match': legacyEtag } }, env)).status, 304);
+  await env.MEDIA.put('stories/legacy', new Uint8Array([42, 43]));
+  await env.DB.prepare("UPDATE story_files SET size=2 WHERE id='legacy'").run();
+  const replacement = await stories.request('/stories/legacy/media', { headers: { 'If-None-Match': legacyEtag } }, env);
+  assert.equal(replacement.status, 200);
+  assert.notEqual(replacement.headers.get('ETag'), legacyEtag);
+  assert.deepEqual(new Uint8Array(await replacement.arrayBuffer()), new Uint8Array([42, 43]));
   await request(admin + '/legacy', 'DELETE');
   const culture = await request('/admin/cultural-weeks', 'POST', { title: 'Semana cultural', year: 2024,
     files: [{ name: 'foto.jpg', type: 'image/jpeg', size: 1 }] });

@@ -17,6 +17,14 @@ function MainApp() {
   const [contentMode] = useState<ContentMode>("figma_exact");
 
   const handleNavSelect = (id: string) => {
+    if (id === "eventos-escola") {
+      window.history.pushState({}, "", "/memorias-da-escola#semanas-culturais");
+      window.dispatchEvent(new PopStateEvent("popstate"));
+      window.setTimeout(() => {
+        document.getElementById("semanas-culturais")?.scrollIntoView();
+      }, 0);
+      return;
+    }
     setActiveSection(id);
     if (id === "sobre" || id === "historias" || id === "escola" || id === "memorias-escola") {
       window.history.pushState({}, "", id === "sobre" ? "/sobre" : id === "historias" ? "/historias-contadas" : "/memorias-da-escola");

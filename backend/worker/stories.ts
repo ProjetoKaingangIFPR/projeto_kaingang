@@ -191,7 +191,8 @@ stories.get('/stories/:id/media', async c => {
   const preview = c.req.query('preview') === '1' && file.type === 'image/jpeg' && file.size > 128 * 1024;
   const range = preview ? undefined : c.req.header('Range');
   if (preview) headers.set('Accept-Ranges', 'none');
-  const etag = '"' + file.id + (preview ? '-preview' : '') + '"';
+  // Optimization keeps the public ID but changes the stored bytes and size.
+  const etag = '"' + file.id + '-' + file.size + (preview ? '-preview' : '') + '"';
   // IDs are unique. Revalidate visibility after deletion, then reuse the stored bytes.
   headers.set('Cache-Control', 'private, no-cache');
   headers.set('ETag', etag);

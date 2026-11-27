@@ -79,8 +79,11 @@ app.post('/api/admin/media',bodyLimit({maxSize:20*1024*1024}),async c=>{
 app.get('/api/media/:id',async c=>{
  const media=await c.env.DB.prepare('SELECT object_key, content_type FROM media WHERE id = ?').bind(c.req.param('id')).first<{object_key:string;content_type:string}>();if(!media)return c.json({error:'Imagem não encontrada.'},404);
  if(!c.env.MEDIA)return c.json({error:'Configure o bucket R2 para acessar imagens.'},503);
+ const etag=JSON.stringify(media.object_key);
+ const headers={'Content-Type':media.content_type,'Cache-Control':'private, no-cache','ETag':etag,'X-Content-Type-Options':'nosniff'};
+ if(c.req.header('If-None-Match')===etag)return new Response(null,{status:304,headers});
  const object=await c.env.MEDIA.get(media.object_key);if(!object)return c.json({error:'Imagem não encontrada.'},404);
- return new Response(object.body,{headers:{'Content-Type':media.content_type,'Cache-Control':'public, max-age=31536000, immutable','X-Content-Type-Options':'nosniff'}});
+ return new Response(object.body,{headers});
 });
 app.route('/api', stories);
 app.all('/api/*',c=>c.json({error:'Recurso não encontrado.'},404));
